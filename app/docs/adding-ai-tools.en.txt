@@ -1,0 +1,46 @@
+﻿Adding an AI service
+====================
+
+Each AI service is one .js file. ChatGPT, Claude, Cursor, Perplexity and Grok
+are built in; adding a file adds another service.
+
+
+■ Where to put the file
+Right-click the widget → [Show AI] → [Add AI tool file (advanced)…] opens:
+
+    %LOCALAPPDATA%\AIUsageWidget\providers
+
+Files here are kept when you update the widget.
+
+
+■ If someone gave you a file
+1. Put the .js file in the folder above.
+2. Right-click the widget → [Show AI] → [Reload AI tools]
+3. Click [Sign in] for the new service.
+
+※ A .js file is code that runs inside your signed-in site.
+  Only use files from people you trust.
+
+
+■ Making your own (requires web development knowledge)
+1. Copy _template.js in that folder and rename it, e.g. mytool.js
+   (files starting with _ are ignored)
+2. Edit the settings at the top:
+     // @name     name shown on the widget
+     // @host     a page of the site kept open while fetching
+     // @home     home page (optional)
+     // @login    sign-in page (optional)
+     // @color    title color, e.g. #8AB4F8 (optional)
+     // @domains  cookie domains removed on sign-out (optional)
+3. Change the script so it reads the usage and returns it in the required format.
+   See the comments in _template.js. LANG is 'ko' or 'en' for localized labels.
+   - To find where a site serves its usage, open DevTools (F12) → Network
+     in your browser and open the site's usage page.
+4. Right-click the widget → [Show AI] → [Reload AI tools]
+
+If a file has a problem, it does not appear on the widget and the reason is written to
+%LOCALAPPDATA%\AIUsageWidget\error.log
+
+
+■ Choosing what the widget shows
+Right-click → [Show AI] and check or uncheck services.

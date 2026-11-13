@@ -1,0 +1,56 @@
+﻿AI Usage Widget - Guide
+=======================
+
+Shows the remaining usage of your ChatGPT, Claude, Cursor, Perplexity and Grok
+subscriptions in a small widget on your desktop. It refreshes every minute.
+
+
+■ Getting started
+- Click [Sign in] for a service and sign in as usual in the window that opens,
+  then click [Done]. "Loading…" appears briefly, then the usage is shown.
+- If Google sign-in is blocked, try "Continue with email".
+- Only ChatGPT and Claude are shown at first. Right-click → [Show AI] to add others.
+- Start the widget with the "AI Usage Widget" icon on your desktop or Start menu.
+
+
+■ Using the widget
+- ⟳ button (top right): refresh now
+- Drag: move the widget (the position is remembered)
+- Right-click: menu
+- Tray icon (right of the taskbar): click to hide/show, right-click for the menu
+- Right-click → [Language] to switch between Korean and English
+- Right-click → [Start with Windows] to start it automatically
+
+Bar colors: green (plenty left) → yellow (60%+ used) → red (85%+ used)
+ChatGPT shows the Codex usage limits. OpenAI does not offer a way to read the
+regular chat message limit.
+
+
+■ Supported services
+- Usage shown: ChatGPT, Claude, Cursor, Perplexity, Grok
+- Gemini, GitHub Copilot and Microsoft Copilot have no way to read usage, so they
+  are greyed out in the menu with the reason.
+
+
+■ Sign-in and privacy
+- You type your password into the service's real sign-in page. The widget never
+  stores or sends your password.
+- Sign-in data is stored only on this PC in:
+    %LOCALAPPDATA%\AIUsageWidget
+- Sign-ins are kept across restarts and updates. The widget extends the session
+  every 12 hours. If a site signs you out, a tray notification appears.
+- Right-click → [Sign out of all], or [Sign out] → a service, to remove sign-ins.
+  On a shared PC, please sign out.
+
+
+■ Problems
+- "Sign-in required" keeps showing: the site signed you out. Sign in again.
+- "Failed to load" or other errors: the site may have changed. Send
+  %LOCALAPPDATA%\AIUsageWidget\error.log to the author or open an issue:
+  https://github.com/jbjmanse-hub/ai-usage-widget/issues
+- This is not an official product of OpenAI, Anthropic or any other company.
+
+
+■ Update / uninstall
+- Update: run a newer AIUsageWidget-Setup.cmd. Sign-ins are kept.
+- Uninstall: right-click → [Uninstall…]. Everything, including sign-ins, is removed.

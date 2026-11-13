@@ -1,166 +1,159 @@
-# AI 사용량 위젯
+# AI Usage Widget
 
-ChatGPT, Claude 같은 **구독형 AI 서비스의 남은 사용량**을 Windows 바탕화면 구석에 작게 띄워 주는 위젯입니다.
-1분마다 자동으로 갱신되고, 한도가 언제 초기화되는지도 함께 보여 줍니다.
+**English** | [한국어](README.ko.md)
 
-- 설치가 필요 없습니다. Windows 10/11에 기본으로 들어 있는 PowerShell과 WebView2만 사용합니다.
-- 용량이 작습니다. 전체 약 0.3MB입니다.
-- API 키를 넣을 필요가 없습니다. 위젯 안에서 각 사이트에 **평소처럼 로그인**하면 됩니다.
-- Windows **스마트 앱 컨트롤**이 켜진 PC에서도 실행됩니다. 함께 들어 있는 DLL은 모두 Microsoft가 서명한 공식 WebView2 파일입니다.
+A small Windows desktop widget that shows the **remaining usage of your AI subscriptions** — ChatGPT, Claude, Cursor, Perplexity and Grok.
+It refreshes every minute and shows when each limit resets.
 
-> ⚠️ OpenAI, Anthropic 등 각 회사의 공식 프로그램이 아닙니다.
-> 각 사이트가 내부에서 쓰는 주소로 사용량을 읽어 오기 때문에, 사이트가 바뀌면 예고 없이 동작하지 않을 수 있습니다.
+- **One file, nothing else to install.** Uses only what ships with Windows 10/11 (PowerShell and WebView2). About 0.5 MB.
+- **No API keys.** Sign in to each service inside the widget, the same way you do in a browser.
+- **Works with Smart App Control.** The bundled DLLs are the official, Microsoft-signed WebView2 files.
+- **Korean and English.** Follows your Windows language, or pick one from the menu.
+
+> ⚠️ This is not an official product of OpenAI, Anthropic or any other company.
+> It reads usage from the internal endpoints the sites use for their own usage pages, so it may stop working without notice when a site changes.
 
 ---
 
-## 지원하는 AI
+## Supported services
 
-| 서비스 | 표시 내용 |
+| Service | What is shown |
 |---|---|
-| **ChatGPT** | Codex 사용 한도 (5시간 / 주간), 요금제 |
-| **Claude** | 5시간 / 주간(전체·Opus·Sonnet) 한도, 요금제 |
-| **Cursor** | 이번 결제 주기의 포함 사용량 (예: $12.88 / $20), 추가 사용량 |
-| **Perplexity** | Research·Labs 등의 남은 횟수 |
-| **Grok** | 남은 질문 수, DeepSearch 남은 횟수 |
+| **ChatGPT** | Codex usage limits (5-hour / weekly), plan |
+| **Claude** | 5-hour and weekly limits (all models / Opus / Sonnet), plan |
+| **Cursor** | Included usage of the current billing cycle (e.g. $12.88 / $20), on-demand usage |
+| **Perplexity** | Remaining uses of Research, Labs, etc. |
+| **Grok** | Remaining queries, DeepSearch |
 
-- 처음에는 **ChatGPT와 Claude만** 표시됩니다. 나머지는 우클릭 → **표시할 AI**에서 체크하면 나타납니다.
-- ChatGPT는 일반 채팅 메시지 한도가 아니라 **Codex 사용 한도** 기준입니다. 일반 채팅 한도는 OpenAI가 조회 방법을 제공하지 않습니다.
-- Gemini, GitHub Copilot, Microsoft Copilot은 웹 로그인으로 사용량을 조회할 방법이 없습니다. 그래서 메뉴에 **회색으로 이유와 함께** 표시되고 선택할 수 없습니다.
-
----
-
-## 설치 및 실행
-
-1. 오른쪽 **Releases**에서 최신 `AIUsageWidget.zip`을 내려받습니다. 또는 이 저장소에서 **Code → Download ZIP**을 눌러도 됩니다.
-2. 받은 zip 파일을 우클릭 → **속성** → 아래쪽 **차단 해제**를 체크한 뒤 **확인**을 누릅니다.
-   이 단계를 먼저 해야 압축을 푼 파일이 막히지 않습니다.
-3. 원하는 곳에 압축을 풀고 `실행.cmd`를 더블클릭합니다.
-4. 화면 오른쪽 위에 위젯이 나타납니다. 각 칸의 **[로그인]** 버튼을 눌러 로그인합니다.
-5. 우클릭 → **바탕화면에 바로가기 만들기**, **Windows 시작 시 자동 실행**을 켜 두면 편합니다.
+- Only **ChatGPT and Claude** are shown at first. Turn on the others from right-click → **Show AI**.
+- For ChatGPT, the widget shows the **Codex usage limits**. OpenAI does not offer a way to read the regular chat message limit.
+- **Gemini, GitHub Copilot and Microsoft Copilot** have no way to read usage with a web sign-in. They are listed **greyed out with the reason** and cannot be selected.
 
 ---
 
-## 사용법
+## Install
 
-| 동작 | 기능 |
+1. Download **`AIUsageWidget-Setup.cmd`** from [Releases](https://github.com/jbjmanse-hub/ai-usage-widget/releases/latest).
+2. **Right-click the file → Properties → check "Unblock" → OK.**
+   Windows marks downloaded files, and on PCs with Smart App Control a downloaded `.cmd` file is blocked until you do this. The file is not code-signed, which is why Windows is careful.
+3. Double-click it. If **"Windows protected your PC"** appears, click **More info → Run anyway**.
+4. The widget appears at the top right of the screen, and an **AI Usage Widget** icon is added to your desktop and Start menu. Use that icon from now on. You can delete the setup file.
+5. Click **[Sign in]** for each service and sign in as usual.
+
+**Update:** run a newer `AIUsageWidget-Setup.cmd` (unblock it first in the same way). Your sign-ins and settings are kept.
+
+**Uninstall:** right-click the widget → **Uninstall…**. The program, its shortcuts and all saved sign-in data are removed.
+
+---
+
+## Using the widget
+
+| Action | Result |
 |---|---|
-| 오른쪽 위 ⟳ 버튼 | 지금 새로고침 |
-| 드래그 | 위치 이동 (위치는 기억됨) |
-| 우클릭 | 전체 메뉴 |
-| 트레이 아이콘 클릭 | 위젯 숨기기/보이기 |
-| 트레이 아이콘 우클릭 | 우클릭 메뉴와 같은 메뉴 |
+| ⟳ button (top right) | Refresh now |
+| Drag | Move the widget (position is remembered) |
+| Right-click | Full menu |
+| Click the tray icon | Hide / show the widget |
+| Right-click the tray icon | Same menu as right-click |
 
-**우클릭 메뉴**
-- 지금 새로고침
-- 로그인 ▸ 도구 선택
-- 표시할 AI ▸ 위젯에 띄울 도구 체크
-- 항상 위에 표시 / 투명도 / Windows 시작 시 자동 실행 / 바탕화면에 바로가기 만들기
-- 위젯 숨기기/보이기
-- 모든 계정 로그아웃 / 로그아웃 ▸ 도구별 로그아웃
-- 종료
+**Right-click menu:** Refresh now · Sign in ▸ · Show AI ▸ · Always on top · Opacity ▸ · Language ▸ · Start with Windows · Create desktop shortcut · Hide/show widget · Sign out of all · Sign out ▸ · Help · Uninstall… · Exit
 
-**막대 색상:** 초록(여유) → 노랑(60% 이상 사용) → 빨강(85% 이상 사용)
+**Bar colors:** green (plenty left) → yellow (60%+ used) → red (85%+ used)
 
 ---
 
-## 로그인과 개인정보
+## Sign-in and privacy
 
-- 비밀번호는 각 사이트의 **실제 로그인 페이지**에 직접 입력합니다. 위젯은 비밀번호를 저장하지도, 어디로 보내지도 않습니다.
-- 로그인 상태(쿠키)는 이 PC의 `%LOCALAPPDATA%\AIUsageWidget` 폴더에만 저장됩니다. 평소 쓰는 Chrome이나 Edge와는 분리되어 있습니다.
-- 위젯을 껐다 켜거나, 재부팅하거나, 새 버전으로 폴더를 덮어써도 로그인이 유지됩니다.
-- 위젯이 12시간마다 사이트에 접속해 로그인을 연장합니다. 그래도 사이트가 로그아웃시키면 트레이 알림이 뜹니다.
-- **모든 계정 로그아웃**으로 한 번에 지우거나, **로그아웃 ▸**에서 도구별로 지울 수 있습니다.
-
----
-
-## 동작 원리
-
-1. 위젯 안에 화면에 보이지 않는 브라우저(WebView2)를 도구마다 하나씩 띄워 둡니다.
-2. 처음 시작할 때 사이트 메인 페이지를 한 번 열어 Cloudflare 같은 보안 확인을 통과합니다.
-3. 로그인된 사이트 안에서 조회 스크립트를 실행합니다. 스크립트는 그 사이트의 사용량 화면이 쓰는 내부 주소로 사용량을 받아 옵니다.
-4. 받은 값을 위젯에 막대 그래프와 리셋 시각으로 표시합니다.
-
-로그인이 진짜로 풀린 경우와 보안 확인에 막힌 경우를 구분해서, 보안 확인이면 자동으로 다시 시도합니다.
+- You type your password into the service's **real sign-in page**. The widget never stores or sends your password anywhere.
+- Sign-in cookies are stored only on your PC in `%LOCALAPPDATA%\AIUsageWidget`, separate from Chrome or Edge.
+- Sign-ins survive restarts, reboots and updates. The widget visits each site every 12 hours to keep the session alive. If a site still signs you out, a tray notification appears.
+- **Sign out of all** removes everything at once; **Sign out ▸** removes a single service.
 
 ---
 
-## AI 도구 추가하기 (개발자용)
+## How it works
 
-AI 도구 하나는 **`.js` 파일 하나**입니다. `providers/` 폴더의 `chatgpt.js`, `claude.js` 등이 예시입니다.
+1. The widget keeps one hidden browser (WebView2) per service, all sharing one local profile.
+2. On start it opens each site's home page once to pass security checks such as Cloudflare.
+3. It runs a small script inside the signed-in site. The script calls the same internal endpoint the site's own usage page uses.
+4. The result is drawn as bars with reset times.
 
-파일 맨 위에 설정을 주석으로 적습니다.
+It tells a real sign-out apart from a blocked security check, and retries automatically in the second case.
+
+---
+
+## Adding an AI service (for developers)
+
+Each service is **one `.js` file** in `app/providers/`. Settings go in comments at the top:
 
 ```js
-// @name   내 AI 도구                     ← 위젯에 표시될 이름 (필수)
-// @host   https://example.com/robots.txt  ← 조회할 때 열어 둘 같은 사이트의 가벼운 페이지 (필수)
-// @home   https://example.com/            ← 메인 페이지, 보안 확인 통과용 (선택)
-// @login  https://example.com/login       ← [로그인] 버튼으로 열 주소 (선택)
-// @color  #8AB4F8                         ← 제목 색상 (선택)
-// @domains example.com auth.example.com   ← 로그아웃할 때 쿠키를 지울 도메인 (선택)
+// @name    My AI Tool                      ← name on the widget (required)
+// @host    https://example.com/robots.txt  ← a light page on the same site, kept open while fetching (required)
+// @home    https://example.com/            ← home page, opened to pass security checks (optional)
+// @login   https://example.com/login       ← opened by the [Sign in] button (optional)
+// @color   #8AB4F8                         ← title color (optional)
+// @domains example.com auth.example.com    ← cookie domains removed on sign-out (optional)
 ```
 
-그 아래 스크립트는 로그인된 사이트 안에서 실행되며, 아래 중 하나를 **JSON 문자열**로 돌려줍니다.
+The script runs inside the signed-in site (so `fetch()` sends the cookies). `LANG` is `'ko'` or `'en'`. Return one of these as a **JSON string**:
 
 ```js
-{ ok: true, plan: 'Pro', rows: [ { label: '5시간', pct: 37, reset: 1735660800000 } ] }  // 성공 (pct = 사용 %, reset = ms 타임스탬프)
-{ ok: true, rows: [ { label: 'Research', value: '남음 12회' } ] }                        // 퍼센트 없이 값만 표시
-{ login: true }   // 로그인 필요
-{ cf: true }      // 보안 확인 페이지가 돌아옴 (메인 페이지를 열고 다시 시도)
-{ err: '메시지' } // 오류
+{ ok: true, plan: 'Pro', rows: [ { label: '5-hour', pct: 37, reset: 1735660800000 } ] }  // pct = % used, reset = ms timestamp
+{ ok: true, rows: [ { label: 'Research', value: '12 left' } ] }                         // a value without a bar
+{ login: true }    // sign-in required
+{ cf: true }       // a security check page came back (the widget opens the home page and retries)
+{ err: 'message' } // error
 ```
 
-- 직접 추가한 파일은 `%LOCALAPPDATA%\AIUsageWidget\providers`에 넣습니다. 위젯을 업데이트해도 지워지지 않습니다.
-- 파일을 넣은 뒤 우클릭 → **표시할 AI** → **AI 도구 목록 다시 불러오기**를 누르면 반영됩니다.
-- 이름이 `_`로 시작하는 파일은 무시됩니다. 자세한 설명은 `providers/_template.js`와 `AI도구_추가방법.txt`에 있습니다.
+- Put your own files in `%LOCALAPPDATA%\AIUsageWidget\providers`. They are kept across updates.
+- Then right-click → **Show AI → Reload AI tools**.
+- Files starting with `_` are ignored. See `app/providers/_template.js`.
 
-> `.js` 파일은 로그인된 사이트 안에서 실행되는 코드입니다. 믿을 수 있는 출처의 파일만 넣으세요.
+> Provider files run code inside your signed-in sites. Only add files from sources you trust.
 
 ---
 
-## 파일 구성
+## Building from source
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+This packs `app/` into `dist/AIUsageWidget-Setup.cmd` (a small cmd/PowerShell installer followed by the base64-encoded app zip).
+To run without installing, run `app/AIUsageWidget.ps1` with `powershell -STA -ExecutionPolicy Bypass -File app\AIUsageWidget.ps1`.
 
 ```
-AIUsageWidget.ps1      위젯 본체 (PowerShell + WPF)
-실행.cmd               콘솔 창 없이 위젯 실행
-app.ico                아이콘
-providers/             AI 도구별 조회 스크립트
-  chatgpt.js, claude.js, cursor.js, perplexity.js, grok.js
-  links.json           사용량 조회가 불가능한 서비스 목록 (메뉴에 회색으로 표시)
-  _template.js         새 도구를 만들 때 쓰는 예시
-lib/                   Microsoft WebView2 SDK 파일 (Microsoft 서명)
-사용법.txt             사용자용 안내
-AI도구_추가방법.txt    도구 추가 안내
+app/
+  AIUsageWidget.ps1   the widget (PowerShell + WPF)
+  app.ico             icon
+  providers/          one script per AI service, unavailable.json (greyed-out services)
+  docs/               guide and adding-ai-tools, in Korean (.ko) and English (.en)
+  lib/                Microsoft WebView2 SDK files (signed by Microsoft)
+installer/            header.cmd + installer.ps1 used by build.ps1
+build.ps1             builds the single-file installer
 ```
 
 ---
 
-## 문제 해결
+## Troubleshooting
 
-| 증상 | 해결 |
+| Problem | Fix |
 |---|---|
-| `실행.cmd`를 눌러도 아무것도 안 뜸 | zip을 **차단 해제**한 뒤 다시 압축을 풀었는지 확인 |
-| "로그인이 필요합니다"가 계속 뜸 | 로그인이 만료된 것이므로 다시 로그인 |
-| "불러오기 실패" 등 오류 | 사이트 방식이 바뀌었을 수 있음. `%LOCALAPPDATA%\AIUsageWidget\error.log` 확인 |
-| 위젯이 사라짐 | 트레이 아이콘을 클릭하면 다시 나타남 |
+| "Smart App Control blocked…" | Right-click the setup file → Properties → check **Unblock** → OK, then run it again |
+| "Windows protected your PC" | Click **More info → Run anyway** |
+| "Sign-in required" keeps showing | The site signed you out; sign in again |
+| "Failed to load" or other errors | The site may have changed. Check `%LOCALAPPDATA%\AIUsageWidget\error.log` and open an issue |
+| The widget disappeared | Click the tray icon |
 
 ---
 
-## 완전 삭제
+## Requirements
 
-1. 우클릭 → **모든 계정 로그아웃** → **Windows 시작 시 자동 실행** 체크 해제 → **종료**
-2. 압축을 푼 폴더, 바탕화면 바로가기, `%LOCALAPPDATA%\AIUsageWidget` 폴더를 삭제합니다.
+- Windows 10 or 11 (x64 / ARM64)
+- Microsoft Edge WebView2 Runtime (preinstalled on Windows 11)
 
----
+## License
 
-## 요구 사항
+[MIT License](LICENSE). The files in `app/lib/` are part of the Microsoft Edge WebView2 SDK and are distributed under Microsoft's own license; they are not covered by the MIT License (see [app/lib/NOTICE.txt](app/lib/NOTICE.txt)).
 
-- Windows 10 또는 11 (x64 / ARM64)
-- Microsoft Edge WebView2 런타임 (Windows 11에는 기본 설치되어 있음)
-
----
-
-## 라이선스
-
-[MIT License](LICENSE)를 따릅니다. 자유롭게 사용·수정·재배포할 수 있으며, 재배포할 때는 저작권 표시와 라이선스 문구를 함께 포함해야 합니다.
-
-`lib/` 폴더의 WebView2 파일은 Microsoft Edge WebView2 SDK의 일부이며 Microsoft의 라이선스를 따릅니다. 이 파일들은 MIT License 적용 대상이 아닙니다. ([lib/NOTICE.txt](lib/NOTICE.txt) 참고)
+See [CHANGELOG.md](CHANGELOG.md) for the version history.
