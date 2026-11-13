@@ -1,0 +1,6 @@
+# 개인 데이터는 %LOCALAPPDATA%\AIUsageWidget 에 저장되므로 저장소에 들어가지 않지만, 혹시 모를 파일 제외
+settings.json
+error.log
+debug
+WebView/
+*.zip
