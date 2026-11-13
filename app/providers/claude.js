@@ -3,8 +3,9 @@
 // @home https://claude.ai/
 // @host https://claude.ai/api/organizations
 // @login https://claude.ai/login
-// Claude 구독의 5시간 / 주간 사용 한도를 표시합니다.
+// Shows the 5-hour / weekly usage limits of a Claude subscription.
 (async () => {
+  const ko = (typeof LANG !== 'undefined' && LANG === 'ko');
   const isHtml = (t) => /<!doctype|<html/i.test(t || '');
   const H = { 'Accept': 'application/json', 'anthropic-client-platform': 'web_claude_ai' };
   const get = async (u) => {
@@ -30,7 +31,9 @@
   if (u.s !== 200) return JSON.stringify({ err: 'HTTP ' + u.s });
   const j = JSON.parse(u.t);
 
-  const names = { five_hour: '5시간', seven_day: '주간 (전체)', seven_day_opus: '주간 (Opus)', seven_day_sonnet: '주간 (Sonnet)' };
+  const names = ko
+    ? { five_hour: '5시간', seven_day: '주간 (전체)', seven_day_opus: '주간 (Opus)', seven_day_sonnet: '주간 (Sonnet)' }
+    : { five_hour: '5-hour', seven_day: 'Weekly (all models)', seven_day_opus: 'Weekly (Opus)', seven_day_sonnet: 'Weekly (Sonnet)' };
   const rows = [];
   for (const k of Object.keys(names)) {
     const w = j[k];

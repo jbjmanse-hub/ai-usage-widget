@@ -4,8 +4,9 @@
 // @host https://chatgpt.com/api/auth/session
 // @login https://chatgpt.com/auth/login
 // @domains chatgpt.com openai.com
-// ChatGPT 구독의 Codex 사용 한도(5시간 / 주간)를 표시합니다.
+// Shows the Codex usage limits (5-hour / weekly) of a ChatGPT subscription.
 (async () => {
+  const ko = (typeof LANG !== 'undefined' && LANG === 'ko');
   const isHtml = (t) => /<!doctype|<html/i.test(t || '');
   const s = await fetch('/api/auth/session', { credentials: 'include' });
   const st = await s.text();
@@ -33,10 +34,11 @@
   let plan = j.plan_type || (sj.account && sj.account.planType) || '';
   if (plan) plan = plan.charAt(0).toUpperCase() + plan.slice(1);
   const label = (sec) => {
-    if (!sec) return '한도';
-    if (sec <= 86400) return Math.round(sec / 3600) + '시간';
+    if (!sec) return ko ? '한도' : 'Limit';
+    if (sec <= 86400) { const hr = Math.round(sec / 3600); return ko ? hr + '시간' : hr + '-hour'; }
     const d = Math.round(sec / 86400);
-    return d === 7 ? '주간' : d + '일';
+    if (d === 7) return ko ? '주간' : 'Weekly';
+    return ko ? d + '일' : d + '-day';
   };
   const rows = [];
   const rl = j.rate_limit || {};

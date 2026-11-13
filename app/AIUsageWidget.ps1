@@ -1,8 +1,10 @@
-﻿# AI 사용량 위젯 (PowerShell 판)
-# 구독형 AI 도구의 사용 한도를 내장 브라우저(WebView2) 로그인으로 조회합니다.
-# AI 도구는 providers 폴더의 .js 파일 하나가 도구 하나입니다.
+﻿# AI Usage Widget (Windows PowerShell 5.1 + WPF + WebView2)
+# Shows remaining subscription usage of AI services on the desktop.
+# Each AI service is one .js file in the providers folder.
+# https://github.com/jbjmanse-hub/ai-usage-widget  (MIT License)
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
 
+$AppVersion = '1.1.0'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ScriptPath = $PSCommandPath
 $Lib = Join-Path $Root 'lib'
@@ -10,6 +12,7 @@ $DataDir = Join-Path $env:LOCALAPPDATA 'AIUsageWidget'
 $UserProviders = Join-Path $DataDir 'providers'
 $SettingsPath = Join-Path $DataDir 'settings.json'
 $LogPath = Join-Path $DataDir 'error.log'
+$ShortcutName = 'AI Usage Widget.lnk'
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
 function Write-Log($msg) {
@@ -18,19 +21,117 @@ function Write-Log($msg) {
 $script:debug = Test-Path (Join-Path $DataDir 'debug')
 function Trace($m) { if ($script:debug) { Write-Log "TRACE $m" } }
 
-# ---------------- 중복 실행 방지 ----------------
+# ---------------- Settings ----------------
+function Load-Settings {
+    $d = [ordered]@{ left = -1; top = -1; opacity = 0.92; topmost = $true; refresh_seconds = 60; hidden = @(); known = @(); lang = 'auto' }
+    $s = $null
+    if (Test-Path $SettingsPath) { try { $s = Get-Content $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {} }
+    if (-not $s) { $s = [pscustomobject]@{} }
+    foreach ($k in $d.Keys) { if (-not ($s.PSObject.Properties.Name -contains $k)) { $s | Add-Member -NotePropertyName $k -NotePropertyValue $d[$k] } }
+    # migrate settings from older versions
+    $h = @($s.hidden | Where-Object { $_ })
+    if ($s.PSObject.Properties.Name -contains 'show_chatgpt') { if (-not $s.show_chatgpt) { $h += 'chatgpt' }; $s.PSObject.Properties.Remove('show_chatgpt') }
+    if ($s.PSObject.Properties.Name -contains 'show_claude') { if (-not $s.show_claude) { $h += 'claude' }; $s.PSObject.Properties.Remove('show_claude') }
+    if ($s.PSObject.Properties.Name -contains 'links') { $s.PSObject.Properties.Remove('links') }
+    $s.hidden = @($h | Select-Object -Unique)
+    $s.known = @($s.known | Where-Object { $_ } | Select-Object -Unique)
+    return $s
+}
+function Save-Settings { try { $script:cfg | ConvertTo-Json | Set-Content $SettingsPath -Encoding UTF8 } catch {} }
+$script:cfg = Load-Settings
+
+# ---------------- Language ----------------
+function Resolve-Lang {
+    if ($script:cfg.lang -eq 'ko' -or $script:cfg.lang -eq 'en') { return $script:cfg.lang }
+    if ([Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName -eq 'ko') { return 'ko' }
+    return 'en'
+}
+$script:lang = Resolve-Lang
+
+$Strings = @{
+    ko = @{
+        title = 'AI 구독 사용량'; updating = '갱신 중…'; updated = '{0} 갱신'; refreshTip = '지금 새로고침'
+        empty = "표시할 AI가 없습니다.`n우클릭 → [표시할 AI]에서 골라주세요."
+        loading = '불러오는 중…'; signIn = '로그인'; needLogin = '로그인이 필요합니다'; noRows = '표시할 한도 정보가 없습니다'
+        left = '남음 {0}%  (사용 {1}%)'
+        resetSoon = '곧 리셋'; resetD = '리셋 {0}일 {1}시간 후  ({2})'; resetH = '리셋 {0}시간 {1}분 후  ({2})'; resetM = '리셋 {0}분 후  ({1})'
+        errNoRuntime = 'WebView2 런타임이 없습니다. Microsoft Edge WebView2를 설치하세요.'
+        errBrowser = '내장 브라우저를 만들지 못했습니다'; errTimeout = '응답 시간 초과'; errFetch = '불러오기 실패'
+        errScript = '조회 스크립트 오류 (error.log 참고)'; errCf = '사이트 보안 확인을 통과하지 못했습니다. 잠시 후 다시 시도합니다.'
+        errParse = '응답을 해석하지 못했습니다'
+        expired = '{0} 로그인이 만료됐습니다. 위젯의 [로그인] 버튼으로 다시 로그인하세요.'
+        loginTitle = '{0} 로그인'; loginDone = '로그인 완료'; loginHint = '아래에서 {0}에 로그인한 뒤 [로그인 완료]를 누르세요.'
+        running = "AI 사용량 위젯이 이미 실행 중입니다.`n작업 표시줄 오른쪽 트레이 아이콘을 확인하세요."
+        libFail = "WebView2 구성 파일을 불러오지 못했습니다.`nlib 폴더가 함께 있는지 확인하세요."
+        browserWait = '내장 브라우저 준비 중입니다. 잠시 후 다시 눌러주세요.'
+        logoutAllQ = '이 PC의 위젯에 저장된 모든 AI 도구의 로그인 정보를 지울까요?'; logoutAllT = '모든 계정 로그아웃'
+        logoutQ = "위젯에 저장된 {0} 로그인 정보를 지울까요?`n(다른 AI 도구의 로그인은 그대로 유지됩니다)"; logoutT = '{0} 로그아웃'
+        autoFail = '자동 실행 설정에 실패했습니다.'
+        uninstallQ = "AI 사용량 위젯을 이 PC에서 삭제할까요?`n`n프로그램, 바로가기, 저장된 로그인 정보가 모두 지워집니다."
+        uninstallT = '프로그램 삭제'; uninstallDone = '삭제를 시작합니다. 잠시 후 모든 파일이 지워집니다.'
+        mRefresh = '지금 새로고침'; mSignIn = '로그인'; mShow = '표시할 AI'; mUnavailable = '사용량 조회 불가'
+        mAddTool = 'AI 도구 파일 추가하기 (고급)…'; mReload = 'AI 도구 목록 다시 불러오기'
+        mTop = '항상 위에 표시'; mOpacity = '투명도'; mOpSolid = '진하게'; mOpNormal = '보통'; mOpLight = '연하게'
+        mAutostart = 'Windows 시작 시 자동 실행'; mDesktop = '바탕화면에 바로가기 만들기'
+        mLang = '언어 (Language)'; mLangAuto = '자동 (시스템 언어)'
+        mHide = '위젯 숨기기/보이기'; mLogoutAll = '모든 계정 로그아웃'; mLogout = '로그아웃'
+        mNoTools = '(로그인할 AI 도구 없음)'; mNoLogged = '(로그인된 AI 도구 없음)'
+        mHelp = '사용법 보기'; mUninstall = '프로그램 삭제…'; mExit = '종료'
+        cantShow = '{0}: {1}. 위젯에 표시할 수 없습니다.'
+        trayText = 'AI 사용량 위젯'
+    }
+    en = @{
+        title = 'AI Subscription Usage'; updating = 'Updating…'; updated = 'Updated {0}'; refreshTip = 'Refresh now'
+        empty = "No AI service selected.`nRight-click → [Show AI] to choose."
+        loading = 'Loading…'; signIn = 'Sign in'; needLogin = 'Sign-in required'; noRows = 'No usage limits to show'
+        left = '{0}% left  ({1}% used)'
+        resetSoon = 'Resets soon'; resetD = 'Resets in {0}d {1}h  ({2})'; resetH = 'Resets in {0}h {1}m  ({2})'; resetM = 'Resets in {0}m  ({1})'
+        errNoRuntime = 'WebView2 Runtime is missing. Please install Microsoft Edge WebView2.'
+        errBrowser = 'Could not start the built-in browser'; errTimeout = 'Request timed out'; errFetch = 'Failed to load'
+        errScript = 'Provider script error (see error.log)'; errCf = 'Could not pass the site security check. Will retry shortly.'
+        errParse = 'Could not read the response'
+        expired = '{0} sign-in has expired. Use the [Sign in] button on the widget to sign in again.'
+        loginTitle = 'Sign in to {0}'; loginDone = 'Done'; loginHint = 'Sign in to {0} below, then click [Done].'
+        running = "AI Usage Widget is already running.`nCheck the tray icon at the right of the taskbar."
+        libFail = "Could not load the WebView2 files.`nMake sure the lib folder is next to the script."
+        browserWait = 'The built-in browser is starting. Please try again in a moment.'
+        logoutAllQ = 'Remove the sign-in data of all AI services stored by this widget?'; logoutAllT = 'Sign out of all'
+        logoutQ = "Remove the {0} sign-in data stored by this widget?`n(Other AI services stay signed in.)"; logoutT = 'Sign out of {0}'
+        autoFail = 'Could not change the startup setting.'
+        uninstallQ = "Uninstall AI Usage Widget from this PC?`n`nThe program, its shortcuts and all saved sign-in data will be removed."
+        uninstallT = 'Uninstall'; uninstallDone = 'Uninstalling. All files will be removed in a few seconds.'
+        mRefresh = 'Refresh now'; mSignIn = 'Sign in'; mShow = 'Show AI'; mUnavailable = 'Usage not available'
+        mAddTool = 'Add AI tool file (advanced)…'; mReload = 'Reload AI tools'
+        mTop = 'Always on top'; mOpacity = 'Opacity'; mOpSolid = 'Solid'; mOpNormal = 'Normal'; mOpLight = 'Light'
+        mAutostart = 'Start with Windows'; mDesktop = 'Create desktop shortcut'
+        mLang = 'Language (언어)'; mLangAuto = 'Auto (system language)'
+        mHide = 'Hide/show widget'; mLogoutAll = 'Sign out of all'; mLogout = 'Sign out'
+        mNoTools = '(no AI services)'; mNoLogged = '(not signed in to any service)'
+        mHelp = 'Help'; mUninstall = 'Uninstall…'; mExit = 'Exit'
+        cantShow = '{0}: {1}. It cannot be shown on the widget.'
+        trayText = 'AI Usage Widget'
+    }
+}
+function T($key) {
+    $v = $Strings[$script:lang][$key]
+    if (-not $v) { $v = $Strings['en'][$key] }
+    if ($args.Count -gt 0) { return ($v -f $args) }
+    return $v
+}
+
+# ---------------- Single instance ----------------
 $created = $false
 $script:mutex = New-Object System.Threading.Mutex($true, 'Local\AIUsageWidget_ps', [ref]$created)
 if (-not $created) {
-    # 재시작 직후라면 이전 프로세스가 끝날 때까지 잠깐 기다린다
+    # right after a restart, wait briefly for the previous process to exit
     try { $created = $script:mutex.WaitOne(5000) } catch [System.Threading.AbandonedMutexException] { $created = $true }
     if (-not $created) {
-        [System.Windows.MessageBox]::Show("AI 사용량 위젯이 이미 실행 중입니다.`n작업 표시줄 오른쪽 트레이 아이콘을 확인하세요.", 'AI 사용량 위젯') | Out-Null
+        [System.Windows.MessageBox]::Show((T 'running'), (T 'trayText')) | Out-Null
         exit
     }
 }
 
-# ---------------- WebView2 불러오기 ----------------
+# ---------------- WebView2 ----------------
 try {
     Add-Type -Path (Join-Path $Lib 'Microsoft.Web.WebView2.Core.dll')
     Add-Type -Path (Join-Path $Lib 'Microsoft.Web.WebView2.Wpf.dll')
@@ -38,38 +139,20 @@ try {
     [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::SetLoaderDllFolderPath((Join-Path $Lib $arch))
 } catch {
     Write-Log $_
-    [System.Windows.MessageBox]::Show("WebView2 구성 파일을 불러오지 못했습니다.`nlib 폴더가 함께 있는지 확인하세요.`n`n$($_.Exception.Message)", 'AI 사용량 위젯') | Out-Null
+    [System.Windows.MessageBox]::Show(("{0}`n`n{1}" -f (T 'libFail'), $_.Exception.Message), (T 'trayText')) | Out-Null
     exit
 }
+# All WebViews share one environment, i.e. one profile with the sign-in cookies.
 $script:envTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, (Join-Path $DataDir 'WebView'), $null)
 $script:env = $null
 
-# ---------------- 설정 ----------------
-function Load-Settings {
-    $d = [ordered]@{ left = -1; top = -1; opacity = 0.92; topmost = $true; refresh_seconds = 60; hidden = @(); known = @(); links = @() }
-    $s = $null
-    if (Test-Path $SettingsPath) { try { $s = Get-Content $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {} }
-    if (-not $s) { $s = [pscustomobject]@{} }
-    foreach ($k in $d.Keys) { if (-not ($s.PSObject.Properties.Name -contains $k)) { $s | Add-Member -NotePropertyName $k -NotePropertyValue $d[$k] } }
-    # 이전 버전 설정 옮기기
-    $h = @($s.hidden | Where-Object { $_ })
-    if ($s.PSObject.Properties.Name -contains 'show_chatgpt') { if (-not $s.show_chatgpt) { $h += 'chatgpt' }; $s.PSObject.Properties.Remove('show_chatgpt') }
-    if ($s.PSObject.Properties.Name -contains 'show_claude') { if (-not $s.show_claude) { $h += 'claude' }; $s.PSObject.Properties.Remove('show_claude') }
-    $s.hidden = @($h | Select-Object -Unique)
-    $s.known = @($s.known | Where-Object { $_ } | Select-Object -Unique)
-    $s.links = @($s.links | Where-Object { $_ -and $_.url })
-    return $s
-}
-function Save-Settings { try { $script:cfg | ConvertTo-Json | Set-Content $SettingsPath -Encoding UTF8 } catch {} }
-$script:cfg = Load-Settings
-
-# ---------------- AI 도구(provider) 불러오기 ----------------
+# ---------------- Providers ----------------
 function New-Site($id, $meta, $js) {
     $hostUrl = $meta['host']
     $homeUrl = $meta['home']; if (-not $homeUrl) { $homeUrl = ([Uri]$hostUrl).GetLeftPart('Authority') + '/' }
     $loginUrl = $meta['login']; if (-not $loginUrl) { $loginUrl = $homeUrl }
     $color = $meta['color']; if (-not $color) { $color = '#8AB4F8' }
-    # 로그아웃할 때 지울 도메인 (기본: host의 기본 도메인, 예: www.perplexity.ai → perplexity.ai)
+    # domains whose cookies are removed on sign-out (default: base domain of host)
     $domains = @()
     if ($meta['domains']) { $domains = @($meta['domains'] -split '[\s,]+' | Where-Object { $_ }) }
     else {
@@ -88,19 +171,6 @@ function New-Site($id, $meta, $js) {
     }
 }
 
-# 바로가기 카드: 사용량 조회 없이 사이트만 열어주는 카드 (코드 불필요)
-function New-LinkSite($id, $name, $color, $url, $note, $builtin, $reason) {
-    if (-not $color) { $color = '#8AB4F8' }
-    if (-not $note) { $note = '바로가기' }
-    if (-not $reason) { $reason = '사용량 조회 기능이 없음' }
-    return @{
-        type = 'link'; builtin = [bool]$builtin; reason = $reason
-        id = $id; name = $name; color = $color; url = $url; note = $note
-        phase = 'idle'; rendered = $false; everOk = $false
-        box = $null; title = $null; rows = $null; resets = @(); spinner = $null; ctl = $null; core = $null
-    }
-}
-
 function Load-Providers {
     $list = [ordered]@{}
     $builtinDir = Join-Path $Root 'providers'
@@ -116,39 +186,36 @@ function Load-Providers {
                     if (-not $meta.ContainsKey($k)) { $meta[$k] = $m.Groups[2].Value }
                 }
                 $id = $meta['id']; if (-not $id) { $id = [IO.Path]::GetFileNameWithoutExtension($f.Name).ToLower() }
-                if (-not $meta['name'] -or -not $meta['host']) { Write-Log "AI 도구 건너뜀 (@name/@host 없음): $($f.FullName)"; continue }
+                if (-not $meta['name'] -or -not $meta['host']) { Write-Log "Provider skipped (missing @name/@host): $($f.FullName)"; continue }
                 [void][Uri]$meta['host']
                 $site = New-Site $id $meta $text
                 $site.builtin = ($dir -eq $builtinDir)
                 $list[$id] = $site
-            } catch { Write-Log "AI 도구 불러오기 실패: $($f.FullName) - $($_.Exception.Message)" }
+            } catch { Write-Log "Provider load failed: $($f.FullName) - $($_.Exception.Message)" }
         }
     }
-    # 기본 바로가기 카드
-    $lj = Join-Path $builtinDir 'links.json'
+    # services without a usage API: listed greyed out in the menu with the reason
+    $lj = Join-Path $builtinDir 'unavailable.json'
     if (Test-Path $lj) {
         try {
-            # PowerShell 5.1의 ConvertFrom-Json은 배열을 한 덩어리로 넘기므로 변수에 담은 뒤 하나씩 꺼낸다
+            # PowerShell 5.1 passes a JSON array down the pipeline as one object, so assign first
             $arr = [IO.File]::ReadAllText($lj, [Text.Encoding]::UTF8) | ConvertFrom-Json
             foreach ($l in $arr) {
-                if (-not $l.id -or $l.id -isnot [string]) { continue }
-                if (-not $list.Contains($l.id)) { $list[$l.id] = New-LinkSite $l.id $l.name $l.color $l.url $l.note $true $l.reason }
+                if (-not $l.id -or $l.id -isnot [string] -or $list.Contains($l.id)) { continue }
+                $reason = $l.reason_en; if ($script:lang -eq 'ko' -and $l.reason_ko) { $reason = $l.reason_ko }
+                $list[$l.id] = @{ type = 'unavailable'; builtin = $true; id = $l.id; name = $l.name; reason = $reason; phase = 'idle' }
             }
-        } catch { Write-Log "links.json 읽기 실패: $($_.Exception.Message)" }
-    }
-    # 사용자가 추가한 바로가기 카드
-    foreach ($l in @($script:cfg.links)) {
-        if ($l.id -and -not $list.Contains($l.id)) { $list[$l.id] = New-LinkSite $l.id $l.name $l.color $l.url '' $false }
+        } catch { Write-Log "unavailable.json read failed: $($_.Exception.Message)" }
     }
     return $list
 }
 $script:sites = Load-Providers
 
-# 처음 보는 기본 도구는 ChatGPT·Claude만 표시하고 나머지는 숨김 (우클릭 → 표시할 AI에서 켜기)
+# Only ChatGPT and Claude are shown by default; other built-in services are opt-in.
 $DefaultShown = @('chatgpt', 'claude')
 $changed = $false
 foreach ($s in $script:sites.Values) {
-    if (@($script:cfg.known) -contains $s.id) { continue }
+    if ($s.type -ne 'usage' -or @($script:cfg.known) -contains $s.id) { continue }
     if ($s.builtin -and -not ($DefaultShown -contains $s.id)) { $script:cfg.hidden = @($script:cfg.hidden) + $s.id }
     $script:cfg.known = @($script:cfg.known) + $s.id
     $changed = $true
@@ -156,7 +223,7 @@ foreach ($s in $script:sites.Values) {
 if ($changed) { Save-Settings }
 
 function Is-Shown($s) {
-    if ($s.type -eq 'link') { return $false }   # 사용량 조회 기능이 없는 서비스는 표시하지 않음
+    if ($s.type -ne 'usage') { return $false }
     return -not (@($script:cfg.hidden) -contains $s.id)
 }
 
@@ -164,33 +231,35 @@ function Is-Shown($s) {
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AI 사용량 위젯" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Title="AI Usage Widget" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" SizeToContent="WidthAndHeight" ShowInTaskbar="False"
         FontFamily="Segoe UI, Malgun Gothic">
   <Border Name="Card" CornerRadius="12" Background="#E61B1D24" BorderBrush="#33FFFFFF" BorderThickness="1" Padding="14,10,14,10">
     <StackPanel Width="250">
       <DockPanel Margin="0,0,0,2" LastChildFill="True">
         <Border Name="RefreshBtn" DockPanel.Dock="Right" Width="22" Height="22" CornerRadius="11" Background="#00FFFFFF"
-                Cursor="Hand" ToolTip="지금 새로고침" Margin="6,-2,-4,0">
+                Cursor="Hand" Margin="6,-2,-4,0">
           <TextBlock Name="RefreshIcon" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#BBFFFFFF"
                      HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
             <TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform>
           </TextBlock>
         </Border>
         <TextBlock Name="Updated" DockPanel.Dock="Right" Foreground="#88FFFFFF" FontSize="10" VerticalAlignment="Center"/>
-        <TextBlock Text="AI 구독 사용량" Foreground="#FFFFFF" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+        <TextBlock Name="Title" Foreground="#FFFFFF" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
       </DockPanel>
       <StackPanel Name="Services"/>
-      <TextBlock Name="EmptyHint" Text="표시할 AI가 없습니다.&#x0a;우클릭 → [표시할 AI]에서 골라주세요." Foreground="#99FFFFFF"
-                 FontSize="11" Margin="0,8,0,2" TextWrapping="Wrap" Visibility="Collapsed"/>
+      <TextBlock Name="EmptyHint" Foreground="#99FFFFFF" FontSize="11" Margin="0,8,0,2" TextWrapping="Wrap" Visibility="Collapsed"/>
     </StackPanel>
   </Border>
 </Window>
 '@
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 $ui = @{}
-foreach ($n in 'Card', 'Updated', 'RefreshBtn', 'RefreshIcon', 'Services', 'EmptyHint') { $ui[$n] = $win.FindName($n) }
+foreach ($n in 'Card', 'Updated', 'Title', 'RefreshBtn', 'RefreshIcon', 'Services', 'EmptyHint') { $ui[$n] = $win.FindName($n) }
 $ui.RefreshRot = $ui.RefreshIcon.RenderTransform
+$ui.Title.Text = T 'title'
+$ui.EmptyHint.Text = T 'empty'
+$ui.RefreshBtn.ToolTip = T 'refreshTip'
 
 $win.Opacity = [double]$script:cfg.opacity
 $win.Topmost = [bool]$script:cfg.topmost
@@ -211,41 +280,25 @@ function TB($text, $color, $size) {
     return $t
 }
 
-function Add-Box($s) {
-    $box = New-Object System.Windows.Controls.StackPanel
-    $title = TB $s.name $s.color 12
-    $title.FontWeight = 'SemiBold'; $title.Margin = '0,10,0,2'
-    $rows = New-Object System.Windows.Controls.StackPanel
-    [void]$box.Children.Add($title); [void]$box.Children.Add($rows)
-    [void]$ui.Services.Children.Add($box)
-    $s.box = $box; $s.title = $title; $s.rows = $rows
-}
-
 function Build-Boxes {
     $ui.Services.Children.Clear()
-    foreach ($s in $script:sites.Values) { Add-Box $s }
+    foreach ($s in $script:sites.Values) {
+        if ($s.type -ne 'usage') { continue }
+        $box = New-Object System.Windows.Controls.StackPanel
+        $title = TB $s.name $s.color 12
+        $title.FontWeight = 'SemiBold'; $title.Margin = '0,10,0,2'
+        $rows = New-Object System.Windows.Controls.StackPanel
+        [void]$box.Children.Add($title); [void]$box.Children.Add($rows)
+        [void]$ui.Services.Children.Add($box)
+        $s.box = $box; $s.title = $title; $s.rows = $rows
+    }
     Apply-Visibility
-}
-
-function Render-Link($s) {
-    $s.rows.Children.Clear()
-    $s.rendered = $true
-    $row = New-Object System.Windows.Controls.DockPanel
-    $row.Margin = '0,2,0,0'
-    $btn = New-Object System.Windows.Controls.Button
-    $btn.Content = '열기'; $btn.Padding = '10,1,10,1'; $btn.FontSize = 11; $btn.Tag = $s.url
-    $btn.Add_Click({ param($b, $e) try { Start-Process $b.Tag } catch { Write-Log $_ } })
-    [System.Windows.Controls.DockPanel]::SetDock($btn, 'Right')
-    [void]$row.Children.Add($btn)
-    $tb = TB $s.note '#99FFFFFF' 10.5
-    $tb.VerticalAlignment = 'Center'; $tb.TextWrapping = 'Wrap'; $tb.Margin = '0,0,6,0'
-    [void]$row.Children.Add($tb)
-    [void]$s.rows.Children.Add($row)
 }
 
 function Apply-Visibility {
     $first = $true
     foreach ($s in $script:sites.Values) {
+        if ($s.type -ne 'usage') { continue }
         if (Is-Shown $s) {
             $s.box.Visibility = 'Visible'
             $top = 10; if ($first) { $top = 6 }
@@ -258,10 +311,10 @@ function Apply-Visibility {
 
 function Format-Reset($dt) {
     $ts = $dt - (Get-Date)
-    if ($ts.TotalSeconds -le 0) { return '곧 리셋' }
-    if ($ts.TotalDays -ge 1) { return ('리셋 {0}일 {1}시간 후  ({2:M/d HH:mm})' -f [int][math]::Floor($ts.TotalDays), $ts.Hours, $dt) }
-    if ($ts.TotalHours -ge 1) { return ('리셋 {0}시간 {1}분 후  ({2:HH:mm})' -f [int][math]::Floor($ts.TotalHours), $ts.Minutes, $dt) }
-    return ('리셋 {0}분 후  ({1:HH:mm})' -f [math]::Max(1, $ts.Minutes), $dt)
+    if ($ts.TotalSeconds -le 0) { return (T 'resetSoon') }
+    if ($ts.TotalDays -ge 1) { return (T 'resetD' ([int][math]::Floor($ts.TotalDays)) $ts.Hours $dt.ToString('M/d HH:mm')) }
+    if ($ts.TotalHours -ge 1) { return (T 'resetH' ([int][math]::Floor($ts.TotalHours)) $ts.Minutes $dt.ToString('HH:mm')) }
+    return (T 'resetM' ([math]::Max(1, $ts.Minutes)) $dt.ToString('HH:mm'))
 }
 
 function Render-Loading($s) {
@@ -274,7 +327,7 @@ function Render-Loading($s) {
     $ic.RenderTransformOrigin = '0.5,0.5'
     $rot = New-Object System.Windows.Media.RotateTransform
     $ic.RenderTransform = $rot
-    $lb = TB '불러오는 중…' '#BBFFFFFF' 11
+    $lb = TB (T 'loading') '#BBFFFFFF' 11
     $lb.Margin = '7,0,0,0'; $lb.VerticalAlignment = 'Center'
     [void]$sp.Children.Add($ic); [void]$sp.Children.Add($lb)
     [void]$s.rows.Children.Add($sp)
@@ -294,11 +347,11 @@ function Render($s, $res) {
         $row = New-Object System.Windows.Controls.DockPanel
         $row.Margin = '0,2,0,0'
         $btn = New-Object System.Windows.Controls.Button
-        $btn.Content = '로그인'; $btn.Padding = '10,1,10,1'; $btn.FontSize = 11; $btn.Tag = $s.id
+        $btn.Content = T 'signIn'; $btn.Padding = '10,1,10,1'; $btn.FontSize = 11; $btn.Tag = $s.id
         $btn.Add_Click({ param($b, $e) Open-Login $script:sites[$b.Tag] })
         [System.Windows.Controls.DockPanel]::SetDock($btn, 'Right')
         [void]$row.Children.Add($btn)
-        $tb = TB '로그인이 필요합니다' '#BBFFFFFF' 11
+        $tb = TB (T 'needLogin') '#BBFFFFFF' 11
         $tb.VerticalAlignment = 'Center'
         [void]$row.Children.Add($tb)
         [void]$panel.Children.Add($row)
@@ -311,12 +364,12 @@ function Render($s, $res) {
         return
     }
     if (@($res.rows).Count -eq 0) {
-        [void]$panel.Children.Add((TB '표시할 한도 정보가 없습니다' '#99FFFFFF' 11))
+        [void]$panel.Children.Add((TB (T 'noRows') '#99FFFFFF' 11))
         return
     }
     foreach ($r in $res.rows) {
         if ($null -eq $r.pct) {
-            # 퍼센트 없이 값만 있는 줄 (예: 남음 23회)
+            # a row with a value but no percentage, e.g. "12 left"
             $g = New-Object System.Windows.Controls.Grid
             $g.Margin = '0,3,0,2'
             [void]$g.Children.Add((TB "$($r.label)" '#DDFFFFFF' 11))
@@ -332,7 +385,7 @@ function Render($s, $res) {
         $g = New-Object System.Windows.Controls.Grid
         $g.Margin = '0,3,0,0'
         [void]$g.Children.Add((TB "$($r.label)" '#DDFFFFFF' 11))
-        $p = TB ('남음 {0}%  (사용 {1}%)' -f [math]::Round(100 - $pct), [math]::Round($pct)) $color 11
+        $p = TB (T 'left' ([math]::Round(100 - $pct)) ([math]::Round($pct))) $color 11
         $p.HorizontalAlignment = 'Right'
         [void]$g.Children.Add($p)
         [void]$panel.Children.Add($g)
@@ -356,7 +409,7 @@ function Render($s, $res) {
     }
 }
 
-# ---------------- 조회 상태 머신 (타이머가 틱마다 진행) ----------------
+# ---------------- Fetch state machine (advanced by the timer) ----------------
 $script:helper = New-Object System.Windows.Window
 $script:helperHwnd = (New-Object System.Windows.Interop.WindowInteropHelper $script:helper).EnsureHandle()
 $script:lastFetch = [datetime]::MinValue
@@ -366,13 +419,12 @@ function Set-RoundActive {
     if ($script:roundActive) { return }
     $script:roundActive = $true
     $script:lastFetch = Get-Date
-    $ui.Updated.Text = '갱신 중…'
+    $ui.Updated.Text = T 'updating'
     $ui.RefreshIcon.Foreground = Brush '#66FFFFFF'
 }
 
 function Start-Site($s, [bool]$showLoading = $false) {
     if (-not $s -or -not (Is-Shown $s)) { return }
-    if ($s.type -eq 'link') { if (-not $s.rendered) { Render-Link $s }; return }
     if ($showLoading -or -not $s.rendered) { Render-Loading $s }
     if ($s.phase -eq 'idle') { $s.phase = 'start'; $s.cfRetry = 0 }
     Set-RoundActive
@@ -389,9 +441,9 @@ function Finish-Site($s, $res) {
     if (-not $res.ok) { $s.ready = $false }
     if ($res.ok) { $s.everOk = $true; $s.notified = $false }
     elseif ($res.login -and $s.everOk -and -not $s.notified) {
-        # 쓰던 중에 로그인이 풀렸을 때만 알림
+        # notify only when a working sign-in expires
         $s.notified = $true
-        try { $tray.ShowBalloonTip(8000, 'AI 사용량 위젯', "$($s.name) 로그인이 만료됐습니다. 위젯의 [로그인] 버튼으로 다시 로그인하세요.", 'Info') } catch {}
+        try { $tray.ShowBalloonTip(8000, (T 'trayText'), (T 'expired' $s.name), 'Info') } catch {}
     }
     try { Render $s $res } catch { Write-Log $_ }
 }
@@ -412,24 +464,25 @@ function Step-Site($s) {
     switch ($s.phase) {
         'start' {
             if (-not $script:env) {
-                if ($script:envTask.IsFaulted) { Finish-Site $s @{ ok = $false; err = 'WebView2 런타임이 없습니다. Microsoft Edge WebView2를 설치하세요.' }; return }
+                if ($script:envTask.IsFaulted) { Finish-Site $s @{ ok = $false; err = (T 'errNoRuntime') }; return }
                 if ($script:envTask.IsCompleted) { $script:env = $script:envTask.Result } else { return }
             }
             if (-not $s.ctl) {
                 $s.ctlTask = $script:env.CreateCoreWebView2ControllerAsync($script:helperHwnd)
                 $s.phase = 'creating'; return
             }
-            # 처음 시작할 때 / 보안확인 필요할 때 / 12시간마다: 메인 페이지를 열어 보안확인 통과 + 로그인 연장
+            # first run / security check needed / every 12h: open the home page to pass checks and extend the session
             if ($s.needHome -or ($s.everOk -and ((Get-Date) - $s.lastHome).TotalHours -ge 12)) { Nav $s $s.home 'home'; return }
             if (-not $s.ready) { Nav $s $s.host 'navigating'; return }
-            $arg = @{ expression = $s.js; awaitPromise = $true; returnByValue = $true } | ConvertTo-Json -Compress
+            $expr = "var LANG = '" + $script:lang + "';`n" + $s.js
+            $arg = @{ expression = $expr; awaitPromise = $true; returnByValue = $true } | ConvertTo-Json -Compress
             $s.evalTask = $s.core.CallDevToolsProtocolMethodAsync('Runtime.evaluate', $arg)
             $s.t0 = Get-Date
             $s.phase = 'evaluating'
         }
         'creating' {
             if (-not $s.ctlTask.IsCompleted) { return }
-            if ($s.ctlTask.IsFaulted) { Write-Log $s.ctlTask.Exception; Finish-Site $s @{ ok = $false; err = '내장 브라우저를 만들지 못했습니다' }; return }
+            if ($s.ctlTask.IsFaulted) { Write-Log $s.ctlTask.Exception; Finish-Site $s @{ ok = $false; err = (T 'errBrowser') }; return }
             $s.ctl = $s.ctlTask.Result
             $s.ctl.IsVisible = $false
             $s.ctl.Bounds = New-Object System.Drawing.Rectangle 0, 0, 1024, 768
@@ -452,28 +505,32 @@ function Step-Site($s) {
         }
         'evaluating' {
             if (-not $s.evalTask.IsCompleted) {
-                if ($elapsed -gt 25) { Finish-Site $s @{ ok = $false; err = '응답 시간 초과' } }
+                if ($elapsed -gt 25) { Finish-Site $s @{ ok = $false; err = (T 'errTimeout') } }
                 return
             }
-            if ($s.evalTask.IsFaulted) { Write-Log $s.evalTask.Exception; Finish-Site $s @{ ok = $false; err = '불러오기 실패' }; return }
+            if ($s.evalTask.IsFaulted) { Write-Log $s.evalTask.Exception; Finish-Site $s @{ ok = $false; err = (T 'errFetch') }; return }
             try {
                 $o = $s.evalTask.Result | ConvertFrom-Json
                 if ($o.exceptionDetails -or -not $o.result.value) {
-                    Write-Log ("{0} 스크립트 오류: {1}" -f $s.name, $s.evalTask.Result)
-                    Finish-Site $s @{ ok = $false; err = '조회 스크립트 오류 (error.log 참고)' }; return
+                    Write-Log ("{0} script error: {1}" -f $s.name, $s.evalTask.Result)
+                    Finish-Site $s @{ ok = $false; err = (T 'errScript') }; return
                 }
                 $v = $o.result.value | ConvertFrom-Json
                 if ($v.cf) {
                     if ($s.cfRetry -lt 1) { $s.cfRetry++; $s.needHome = $true; $s.ready = $false; $s.phase = 'start'; return }
-                    Finish-Site $s @{ ok = $false; err = '사이트 보안 확인을 통과하지 못했습니다. 잠시 후 다시 시도합니다.' }; return
+                    Finish-Site $s @{ ok = $false; err = (T 'errCf') }; return
                 }
                 if ($v.login) { Finish-Site $s @{ ok = $false; login = $true; why = "$($v.why)" }; return }
                 if ($v.err) { Finish-Site $s @{ ok = $false; err = "$($v.err)" }; return }
                 Finish-Site $s @{ ok = $true; plan = "$($v.plan)"; rows = @($v.rows) }
-            } catch { Write-Log $_; Finish-Site $s @{ ok = $false; err = '응답을 해석하지 못했습니다' } }
+            } catch { Write-Log $_; Finish-Site $s @{ ok = $false; err = (T 'errParse') } }
         }
     }
 }
+
+# pending async tasks, completed ones are handled by the timer
+$script:pending = New-Object System.Collections.ArrayList
+function When($task, [scriptblock]$then, $state) { [void]$script:pending.Add(@{ t = $task; f = $then; s = $state }) }
 
 $script:spin = 0
 $script:lastCountdown = Get-Date
@@ -500,7 +557,7 @@ $timer.Add_Tick({
                 $script:roundActive = $false
                 $ui.RefreshRot.Angle = 0
                 $ui.RefreshIcon.Foreground = Brush '#BBFFFFFF'
-                $ui.Updated.Text = (Get-Date).ToString('HH:mm') + ' 갱신'
+                $ui.Updated.Text = T 'updated' ((Get-Date).ToString('HH:mm'))
             }
         }
 
@@ -513,33 +570,33 @@ $timer.Add_Tick({
     } catch { Write-Log $_ }
 })
 
-# ---------------- 새로고침 버튼 ----------------
+# ---------------- Refresh button ----------------
 $ui.RefreshBtn.Add_MouseEnter({ $ui.RefreshBtn.Background = Brush '#22FFFFFF' })
 $ui.RefreshBtn.Add_MouseLeave({ $ui.RefreshBtn.Background = Brush '#00FFFFFF' })
 $ui.RefreshBtn.Add_MouseLeftButtonDown({ param($b, $e) $e.Handled = $true })
 $ui.RefreshBtn.Add_MouseLeftButtonUp({ param($b, $e) $e.Handled = $true; Start-Refresh })
 
-# ---------------- 로그인 창 ----------------
+# ---------------- Sign-in window ----------------
 $script:loginWin = $null
 function Open-Login($site) {
     if (-not $site) { return }
     if ($script:loginWin) { $script:loginWin.Activate(); return }
     if (-not $script:env) {
         if ($script:envTask.IsCompleted -and -not $script:envTask.IsFaulted) { $script:env = $script:envTask.Result }
-        else { [System.Windows.MessageBox]::Show('내장 브라우저 준비 중입니다. 잠시 후 다시 눌러주세요.', 'AI 사용량 위젯') | Out-Null; return }
+        else { [System.Windows.MessageBox]::Show((T 'browserWait'), (T 'trayText')) | Out-Null; return }
     }
     $w = New-Object System.Windows.Window
-    $w.Title = "$($site.name) 로그인"; $w.Width = 500; $w.Height = 760; $w.WindowStartupLocation = 'CenterScreen'
+    $w.Title = T 'loginTitle' $site.name; $w.Width = 500; $w.Height = 760; $w.WindowStartupLocation = 'CenterScreen'
     $ico = Join-Path $Root 'app.ico'; if (Test-Path $ico) { try { $w.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create([Uri]$ico) } catch {} }
     $dock = New-Object System.Windows.Controls.DockPanel
     $bar = New-Object System.Windows.Controls.DockPanel
     $bar.Background = Brush '#1B1D24'
     $done = New-Object System.Windows.Controls.Button
-    $done.Content = '로그인 완료'; $done.Padding = '14,4,14,4'; $done.Margin = '8'; $done.FontWeight = 'SemiBold'
+    $done.Content = T 'loginDone'; $done.Padding = '14,4,14,4'; $done.Margin = '8'; $done.FontWeight = 'SemiBold'
     $done.Add_Click({ $script:loginWin.Close() })
     [System.Windows.Controls.DockPanel]::SetDock($done, 'Right')
     [void]$bar.Children.Add($done)
-    $msg = TB "아래에서 $($site.name)에 로그인한 뒤 [로그인 완료]를 누르세요." '#FFFFFF' 12
+    $msg = TB (T 'loginHint' $site.name) '#FFFFFF' 12
     $msg.VerticalAlignment = 'Center'; $msg.Margin = '12,0,0,0'; $msg.TextWrapping = 'Wrap'
     [void]$bar.Children.Add($msg)
     [System.Windows.Controls.DockPanel]::SetDock($bar, 'Top')
@@ -564,7 +621,7 @@ function Open-Login($site) {
     $w.Add_Closed({
         try { $script:loginWv.Dispose() } catch {}
         $script:loginWin = $null
-        # 로그인한 도구를 바로 다시 조회하고, 그동안 "불러오는 중" 표시
+        # re-check the service right away and show "Loading…" meanwhile
         $s = $script:loginSite
         $s.ready = $false; $s.cfRetry = 0
         Start-Site $s $true
@@ -573,14 +630,11 @@ function Open-Login($site) {
     $w.Show()
 }
 
-# 비동기 작업 완료 대기 목록 (타이머가 완료된 것을 처리)
-$script:pending = New-Object System.Collections.ArrayList
-function When($task, [scriptblock]$then, $state) { [void]$script:pending.Add(@{ t = $task; f = $then; s = $state }) }
-
+# ---------------- Sign-out ----------------
 function Logout-Site($id) {
     $s = $script:sites[$id]
     if (-not $s -or -not $s.core) { return }
-    $r = [System.Windows.MessageBox]::Show("위젯에 저장된 $($s.name) 로그인 정보를 지울까요?`n(다른 AI 도구의 로그인은 그대로 유지됩니다)", "$($s.name) 로그아웃", 'YesNo', 'Question')
+    $r = [System.Windows.MessageBox]::Show((T 'logoutQ' $s.name), (T 'logoutT' $s.name), 'YesNo', 'Question')
     if ($r -ne 'Yes') { return }
     When ($s.core.CallDevToolsProtocolMethodAsync('Network.getAllCookies', '{}')) {
         param($t, $s)
@@ -599,25 +653,23 @@ function Logout-Site($id) {
         foreach ($o in $s.origins) {
             [void]$s.core.CallDevToolsProtocolMethodAsync('Storage.clearDataForOrigin', (@{ origin = $o; storageTypes = 'all' } | ConvertTo-Json -Compress))
         }
-        Trace ("{0} 로그아웃: 쿠키 {1}개 삭제" -f $s.name, $n)
+        Trace ("{0} signed out: {1} cookies removed" -f $s.name, $n)
         $s.ready = $false; $s.needHome = $true; $s.everOk = $false; $s.notified = $true; $s.rendered = $false
         Start-Site $s $true
     } $s
 }
 
 function Logout-All {
-    $r = [System.Windows.MessageBox]::Show('이 PC의 위젯에 저장된 모든 AI 도구의 로그인 정보를 지울까요?', '모든 계정 로그아웃', 'YesNo', 'Question')
+    $r = [System.Windows.MessageBox]::Show((T 'logoutAllQ'), (T 'logoutAllT'), 'YesNo', 'Question')
     if ($r -ne 'Yes') { return }
     $core = $null
     foreach ($s in $script:sites.Values) { if ($s.core) { $core = $s.core } }
-    if ($core) {
-        try { [void]$core.Profile.ClearBrowsingDataAsync() } catch { Write-Log $_ }
-    }
-    foreach ($s in $script:sites.Values) { $s.ready = $false; $s.needHome = $true; $s.everOk = $false; $s.rendered = $false }
+    if ($core) { try { [void]$core.Profile.ClearBrowsingDataAsync() } catch { Write-Log $_ } }
+    foreach ($s in $script:sites.Values) { if ($s.type -eq 'usage') { $s.ready = $false; $s.needHome = $true; $s.everOk = $false; $s.rendered = $false } }
     Start-Refresh
 }
 
-# ---------------- AI 도구 관리 ----------------
+# ---------------- Provider management ----------------
 function Toggle-Provider($id) {
     $h = @($script:cfg.hidden | Where-Object { $_ })
     if ($h -contains $id) { $h = @($h | Where-Object { $_ -ne $id }) } else { $h += $id }
@@ -628,70 +680,31 @@ function Toggle-Provider($id) {
     if (Is-Shown $s) { Start-Site $s $true }
 }
 
+function Doc-Path($base) {
+    $p = Join-Path $Root ("docs\{0}.{1}.txt" -f $base, $script:lang)
+    if (-not (Test-Path $p)) { $p = Join-Path $Root ("docs\{0}.en.txt" -f $base) }
+    return $p
+}
+
 function Add-Tool {
     New-Item -ItemType Directory -Force -Path $UserProviders | Out-Null
     $tpl = Join-Path $Root 'providers\_template.js'
     $dst = Join-Path $UserProviders '_template.js'
     if ((Test-Path $tpl) -and -not (Test-Path $dst)) { Copy-Item $tpl $dst }
     Start-Process explorer.exe $UserProviders
-    $guide = Join-Path $Root 'AI도구_추가방법.txt'
+    $guide = Doc-Path 'adding-ai-tools'
     if (Test-Path $guide) { Start-Process notepad.exe $guide }
 }
 
-function Add-Link {
-    $w = New-Object System.Windows.Window
-    $w.Title = '바로가기 카드 추가'; $w.Width = 400; $w.SizeToContent = 'Height'
-    $w.WindowStartupLocation = 'CenterScreen'; $w.ResizeMode = 'NoResize'; $w.Topmost = $true
-    $sp = New-Object System.Windows.Controls.StackPanel
-    $sp.Margin = '16'
-    $info = New-Object System.Windows.Controls.TextBlock
-    $info.Text = "사용량은 표시되지 않고, 위젯에서 [열기]를 누르면 해당 사이트가 열리는 카드입니다."
-    $info.TextWrapping = 'Wrap'; $info.Margin = '0,0,0,12'; $info.Foreground = [System.Windows.Media.Brushes]::DimGray
-    [void]$sp.Children.Add($info)
-    $l1 = New-Object System.Windows.Controls.TextBlock; $l1.Text = '이름 (예: Gemini)'
-    $nameBox = New-Object System.Windows.Controls.TextBox; $nameBox.Margin = '0,4,0,10'; $nameBox.Padding = '4'
-    $l2 = New-Object System.Windows.Controls.TextBlock; $l2.Text = '열 주소 (예: https://gemini.google.com)'
-    $urlBox = New-Object System.Windows.Controls.TextBox; $urlBox.Margin = '0,4,0,14'; $urlBox.Padding = '4'
-    foreach ($c in $l1, $nameBox, $l2, $urlBox) { [void]$sp.Children.Add($c) }
-    $btns = New-Object System.Windows.Controls.StackPanel
-    $btns.Orientation = 'Horizontal'; $btns.HorizontalAlignment = 'Right'
-    $ok = New-Object System.Windows.Controls.Button; $ok.Content = '추가'; $ok.Padding = '16,4,16,4'; $ok.IsDefault = $true
-    $cancel = New-Object System.Windows.Controls.Button; $cancel.Content = '취소'; $cancel.Padding = '16,4,16,4'; $cancel.Margin = '8,0,0,0'; $cancel.IsCancel = $true
-    [void]$btns.Children.Add($ok); [void]$btns.Children.Add($cancel)
-    [void]$sp.Children.Add($btns)
-    $w.Content = $sp
-    $script:linkDlg = @{ w = $w; name = $nameBox; url = $urlBox }
-    $ok.Add_Click({
-        $d = $script:linkDlg
-        $n = $d.name.Text.Trim(); $u = $d.url.Text.Trim()
-        if (-not $n) { [System.Windows.MessageBox]::Show('이름을 입력하세요.', '바로가기 카드 추가') | Out-Null; return }
-        if ($u -and $u -notmatch '^https?://') { $u = 'https://' + $u }
-        $uri = $null
-        if (-not [Uri]::TryCreate($u, 'Absolute', [ref]$uri)) { [System.Windows.MessageBox]::Show('주소가 올바르지 않습니다.', '바로가기 카드 추가') | Out-Null; return }
-        $id = 'link-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-        $script:cfg.links = @($script:cfg.links) + [pscustomobject]@{ id = $id; name = $n; url = $uri.AbsoluteUri }
-        $script:cfg.known = @($script:cfg.known) + $id
-        Save-Settings
-        $s = New-LinkSite $id $n '' $uri.AbsoluteUri '' $false
-        $script:sites[$id] = $s
-        Add-Box $s
-        Apply-Visibility
-        Render-Link $s
-        $d.w.Close()
-    })
-    [void]$w.ShowDialog()
+function Show-Help {
+    $p = Doc-Path 'guide'
+    if (Test-Path $p) { Start-Process notepad.exe $p }
 }
 
-function Remove-Link($id) {
-    $s = $script:sites[$id]
-    if (-not $s) { return }
-    $r = [System.Windows.MessageBox]::Show("'$($s.name)' 바로가기 카드를 삭제할까요?", '바로가기 카드 삭제', 'YesNo', 'Question')
-    if ($r -ne 'Yes') { return }
-    $script:cfg.links = @($script:cfg.links | Where-Object { $_.id -ne $id })
+function Set-Lang($l) {
+    $script:cfg.lang = $l
     Save-Settings
-    [void]$ui.Services.Children.Remove($s.box)
-    $script:sites.Remove($id)
-    Apply-Visibility
+    Restart-App
 }
 
 function Restart-App {
@@ -699,71 +712,88 @@ function Restart-App {
     Exit-App
 }
 
-# ---------------- 자동 실행 / 바로가기 ----------------
-$StartupLnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'AI 사용량 위젯.lnk'
-$DesktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'AI 사용량 위젯.lnk'
+# ---------------- Shortcuts / startup / uninstall ----------------
+$StartupLnk = Join-Path ([Environment]::GetFolderPath('Startup')) $ShortcutName
+$DesktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) $ShortcutName
+$ProgramsLnk = Join-Path ([Environment]::GetFolderPath('Programs')) $ShortcutName
 function New-Shortcut($path) {
     $ws = New-Object -ComObject WScript.Shell
     $l = $ws.CreateShortcut($path)
     $l.TargetPath = "$env:WINDIR\System32\conhost.exe"
     $l.Arguments = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$script:ScriptPath`""
     $l.WorkingDirectory = $Root
+    $l.Description = 'AI Usage Widget'
     $ico = Join-Path $Root 'app.ico'; if (Test-Path $ico) { $l.IconLocation = $ico }
     $l.Save()
 }
-function Toggle-AutoStart { if (Test-Path $StartupLnk) { Remove-Item $StartupLnk -Force } else { New-Shortcut $StartupLnk } }
+function Toggle-AutoStart {
+    try { if (Test-Path $StartupLnk) { Remove-Item $StartupLnk -Force } else { New-Shortcut $StartupLnk } }
+    catch { Write-Log $_; [System.Windows.MessageBox]::Show((T 'autoFail'), (T 'trayText')) | Out-Null }
+}
 
-# ---------------- 메뉴 (우클릭 / 트레이 공용) ----------------
+function Uninstall-App {
+    $r = [System.Windows.MessageBox]::Show((T 'uninstallQ'), (T 'uninstallT'), 'YesNo', 'Warning')
+    if ($r -ne 'Yes') { return }
+    foreach ($p in @($StartupLnk, $DesktopLnk, $ProgramsLnk)) { Remove-Item $p -Force -ErrorAction SilentlyContinue }
+    [System.Windows.MessageBox]::Show((T 'uninstallDone'), (T 'uninstallT')) | Out-Null
+    # Delete the data folder after this process has exited. The installer puts the app in
+    # %LOCALAPPDATA%\AIUsageWidget\app, so this removes the program and the sign-in data together.
+    Start-Process cmd.exe -ArgumentList "/c timeout /t 6 /nobreak >nul & rmdir /s /q `"$DataDir`"" -WindowStyle Hidden
+    $script:noSave = $true
+    Exit-App
+}
+
+# ---------------- Menu (shared by right-click and tray) ----------------
 function Get-MenuDefs {
-    $loginSub = @()
-    $showSub = @()
-    $disabledSub = @()
+    $loginSub = @(); $showSub = @(); $disabledSub = @(); $logoutSub = @()
     foreach ($s in $script:sites.Values) {
-        if ($s.type -eq 'link') {
-            # 사용량 조회 기능이 없는 서비스: 회색으로 이유와 함께 표시, 선택 불가
-            $disabledSub += @{ t = "$($s.name)  —  $($s.reason)"; dis = $true; tip = "$($s.name)은(는) $($s.reason) 위젯에 표시할 수 없습니다." }
+        if ($s.type -eq 'unavailable') {
+            $disabledSub += @{ t = "$($s.name)  —  $($s.reason)"; dis = $true; tip = (T 'cantShow' $s.name $s.reason) }
             continue
         }
         $loginSub += @{ t = "$($s.name)"; a = [scriptblock]::Create("Open-Login `$script:sites['$($s.id)']") }
         $showSub += @{ t = "$($s.name)"; c = (Is-Shown $s); a = [scriptblock]::Create("Toggle-Provider '$($s.id)'") }
+        if ($s.everOk -and $s.core) { $logoutSub += @{ t = "$($s.name)"; a = [scriptblock]::Create("Logout-Site '$($s.id)'") } }
     }
+    if ($loginSub.Count -eq 0) { $loginSub = @(@{ t = (T 'mNoTools'); dis = $true }) }
+    if ($logoutSub.Count -eq 0) { $logoutSub = @(@{ t = (T 'mNoLogged'); dis = $true }) }
     if ($disabledSub.Count -gt 0) {
         $showSub += @{ sep = $true }
-        $showSub += @{ t = '사용량 조회 불가'; dis = $true }
+        $showSub += @{ t = (T 'mUnavailable'); dis = $true }
         $showSub += $disabledSub
     }
-    if ($loginSub.Count -eq 0) { $loginSub = @(@{ t = '(로그인할 AI 도구 없음)'; dis = $true }) }
-    # 지금 로그인돼 있는 도구만 하나씩 로그아웃
-    $logoutSub = @()
-    foreach ($s in $script:sites.Values) {
-        if ($s.type -eq 'usage' -and $s.everOk -and $s.core) {
-            $logoutSub += @{ t = "$($s.name)"; a = [scriptblock]::Create("Logout-Site '$($s.id)'") }
-        }
-    }
-    if ($logoutSub.Count -eq 0) { $logoutSub = @(@{ t = '(로그인된 AI 도구 없음)'; dis = $true }) }
     $showSub += @{ sep = $true }
-    $showSub += @{ t = 'AI 도구 파일 추가하기 (고급)…'; a = { Add-Tool } }
-    $showSub += @{ t = 'AI 도구 목록 다시 불러오기'; a = { Restart-App } }
+    $showSub += @{ t = (T 'mAddTool'); a = { Add-Tool } }
+    $showSub += @{ t = (T 'mReload'); a = { Restart-App } }
 
     $op = [double]$script:cfg.opacity
+    $cl = "$($script:cfg.lang)"
     return @(
-        @{ t = '지금 새로고침'; a = { Start-Refresh } },
-        @{ t = '로그인'; sub = $loginSub },
-        @{ t = '표시할 AI'; sub = $showSub },
+        @{ t = (T 'mRefresh'); a = { Start-Refresh } },
+        @{ t = (T 'mSignIn'); sub = $loginSub },
+        @{ t = (T 'mShow'); sub = $showSub },
         @{ sep = $true },
-        @{ t = '항상 위에 표시'; c = [bool]$script:cfg.topmost; a = { $script:cfg.topmost = -not $script:cfg.topmost; $win.Topmost = $script:cfg.topmost; Save-Settings } },
-        @{ t = '투명도'; sub = @(
-            @{ t = '진하게'; c = ([math]::Abs($op - 1.0) -lt 0.01); a = { $script:cfg.opacity = 1.0; $win.Opacity = 1.0; Save-Settings } },
-            @{ t = '보통'; c = ([math]::Abs($op - 0.92) -lt 0.01); a = { $script:cfg.opacity = 0.92; $win.Opacity = 0.92; Save-Settings } },
-            @{ t = '연하게'; c = ([math]::Abs($op - 0.7) -lt 0.01); a = { $script:cfg.opacity = 0.7; $win.Opacity = 0.7; Save-Settings } }
+        @{ t = (T 'mTop'); c = [bool]$script:cfg.topmost; a = { $script:cfg.topmost = -not $script:cfg.topmost; $win.Topmost = $script:cfg.topmost; Save-Settings } },
+        @{ t = (T 'mOpacity'); sub = @(
+            @{ t = (T 'mOpSolid'); c = ([math]::Abs($op - 1.0) -lt 0.01); a = { $script:cfg.opacity = 1.0; $win.Opacity = 1.0; Save-Settings } },
+            @{ t = (T 'mOpNormal'); c = ([math]::Abs($op - 0.92) -lt 0.01); a = { $script:cfg.opacity = 0.92; $win.Opacity = 0.92; Save-Settings } },
+            @{ t = (T 'mOpLight'); c = ([math]::Abs($op - 0.7) -lt 0.01); a = { $script:cfg.opacity = 0.7; $win.Opacity = 0.7; Save-Settings } }
         ) },
-        @{ t = 'Windows 시작 시 자동 실행'; c = (Test-Path $StartupLnk); a = { Toggle-AutoStart } },
-        @{ t = '바탕화면에 바로가기 만들기'; a = { New-Shortcut $DesktopLnk } },
+        @{ t = (T 'mLang'); sub = @(
+            @{ t = (T 'mLangAuto'); c = ($cl -ne 'ko' -and $cl -ne 'en'); a = { Set-Lang 'auto' } },
+            @{ t = '한국어'; c = ($cl -eq 'ko'); a = { Set-Lang 'ko' } },
+            @{ t = 'English'; c = ($cl -eq 'en'); a = { Set-Lang 'en' } }
+        ) },
+        @{ t = (T 'mAutostart'); c = (Test-Path $StartupLnk); a = { Toggle-AutoStart } },
+        @{ t = (T 'mDesktop'); a = { New-Shortcut $DesktopLnk } },
         @{ sep = $true },
-        @{ t = '위젯 숨기기/보이기'; a = { Toggle-Shown } },
-        @{ t = '모든 계정 로그아웃'; a = { Logout-All } },
-        @{ t = '로그아웃'; sub = $logoutSub },
-        @{ t = '종료'; a = { Exit-App } }
+        @{ t = (T 'mHide'); a = { Toggle-Shown } },
+        @{ t = (T 'mLogoutAll'); a = { Logout-All } },
+        @{ t = (T 'mLogout'); sub = $logoutSub },
+        @{ sep = $true },
+        @{ t = (T 'mHelp'); a = { Show-Help } },
+        @{ t = (T 'mUninstall'); a = { Uninstall-App } },
+        @{ t = (T 'mExit'); a = { Exit-App } }
     )
 }
 
@@ -809,7 +839,7 @@ $ui.Card.Add_ContextMenuOpening({ $ui.Card.ContextMenu = Build-WpfMenu })
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $icoPath = Join-Path $Root 'app.ico'
 if (Test-Path $icoPath) { $tray.Icon = New-Object System.Drawing.Icon $icoPath } else { $tray.Icon = [System.Drawing.SystemIcons]::Information }
-$tray.Text = 'AI 사용량 위젯'
+$tray.Text = T 'trayText'
 $tray.ContextMenuStrip = New-Object System.Windows.Forms.ContextMenuStrip
 $tray.ContextMenuStrip.Add_Opening({
     $tray.ContextMenuStrip.Items.Clear()
@@ -821,17 +851,17 @@ $tray.Visible = $true
 function Exit-App {
     if ($script:quit) { return }
     $script:quit = $true
-    $script:cfg.left = [int]$win.Left; $script:cfg.top = [int]$win.Top; Save-Settings
+    if (-not $script:noSave) { $script:cfg.left = [int]$win.Left; $script:cfg.top = [int]$win.Top; Save-Settings }
     $timer.Stop()
     $tray.Visible = $false; $tray.Dispose()
     if ($script:loginWin) { try { $script:loginWin.Close() } catch {} }
-    # 내장 브라우저를 정상 종료해 로그인 쿠키가 디스크에 확실히 기록되게 한다
+    # close the browsers properly so the sign-in cookies are flushed to disk
     foreach ($s in $script:sites.Values) { if ($s.ctl) { try { $s.ctl.Close() } catch {} } }
     Start-Sleep -Milliseconds 800
     $win.Close()
 }
 
-# ---------------- 시작 ----------------
+# ---------------- Start ----------------
 Build-Boxes
 $win.Add_MouseLeftButtonDown({ try { $win.DragMove() } catch {} })
 $win.Add_LocationChanged({ $script:cfg.left = [int]$win.Left; $script:cfg.top = [int]$win.Top })
