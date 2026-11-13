@@ -47,6 +47,7 @@ function Resolve-Lang {
     return 'en'
 }
 $script:lang = Resolve-Lang
+Trace "start v$AppVersion lang=$script:lang (setting: $($script:cfg.lang))"
 
 $Strings = @{
     ko = @{
