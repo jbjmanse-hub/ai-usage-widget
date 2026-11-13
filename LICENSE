@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The files in the lib/ folder (Microsoft.Web.WebView2.Core.dll,
-Microsoft.Web.WebView2.Wpf.dll, WebView2Loader.dll) are part of the
-Microsoft Edge WebView2 SDK and are redistributed under Microsoft's own
-license terms. They are not covered by the MIT License above.

@@ -163,4 +163,4 @@ AI도구_추가방법.txt    도구 추가 안내
 
 [MIT License](LICENSE)를 따릅니다. 자유롭게 사용·수정·재배포할 수 있으며, 재배포할 때는 저작권 표시와 라이선스 문구를 함께 포함해야 합니다.
 
-`lib/` 폴더의 WebView2 파일은 Microsoft Edge WebView2 SDK의 일부이며 Microsoft의 라이선스를 따릅니다. 이 파일들은 MIT License 적용 대상이 아닙니다.
+`lib/` 폴더의 WebView2 파일은 Microsoft Edge WebView2 SDK의 일부이며 Microsoft의 라이선스를 따릅니다. 이 파일들은 MIT License 적용 대상이 아닙니다. ([lib/NOTICE.txt](lib/NOTICE.txt) 참고)
