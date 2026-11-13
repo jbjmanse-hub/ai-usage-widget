@@ -4,7 +4,7 @@
 # https://github.com/jbjmanse-hub/ai-usage-widget  (MIT License)
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
 
-$AppVersion = '1.1.0'
+$AppVersion = '1.2.0'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ScriptPath = $PSCommandPath
 $Lib = Join-Path $Root 'lib'
@@ -124,13 +124,18 @@ function T($key) {
 $created = $false
 $script:mutex = New-Object System.Threading.Mutex($true, 'Local\AIUsageWidget_ps', [ref]$created)
 if (-not $created) {
-    # right after a restart, wait briefly for the previous process to exit
+    # Already running: ask that instance to show its window, then quit quietly.
+    $evt = $null
+    if ([System.Threading.EventWaitHandle]::TryOpenExisting('Local\AIUsageWidget_show', [ref]$evt)) { [void]$evt.Set(); exit }
+    # No running window yet (e.g. right after a restart): wait briefly for the previous process to exit.
     try { $created = $script:mutex.WaitOne(5000) } catch [System.Threading.AbandonedMutexException] { $created = $true }
     if (-not $created) {
         [System.Windows.MessageBox]::Show((T 'running'), (T 'trayText')) | Out-Null
         exit
     }
 }
+# Another launch sets this event to bring the widget back on screen.
+$script:showEvt = New-Object System.Threading.EventWaitHandle($false, 'AutoReset', 'Local\AIUsageWidget_show')
 
 # ---------------- WebView2 ----------------
 try {
@@ -539,6 +544,7 @@ $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(120)
 $timer.Add_Tick({
     try {
+        if ($script:showEvt.WaitOne(0)) { $win.Show(); $win.Activate(); [void]$win.Focus() }
         if ($script:pending.Count -gt 0) {
             foreach ($p in @($script:pending)) {
                 if (-not $p.t.IsCompleted) { continue }

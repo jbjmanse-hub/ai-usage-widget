@@ -1,4 +1,6 @@
-# Builds the single-file installer: dist\AIUsageWidget-Setup.cmd
+﻿# Builds the single-file releases:
+#   dist\AIUsageWidget.cmd        portable: double-click to run, nothing installed
+#   dist\AIUsageWidget-Setup.cmd  installer: adds desktop and Start menu shortcuts with the app icon
 # Usage: powershell -ExecutionPolicy Bypass -File build.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -16,14 +18,17 @@ Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip -CompressionLe
 $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($zip))
 $sb = New-Object Text.StringBuilder
 for ($i = 0; $i -lt $b64.Length; $i += 1000) { [void]$sb.AppendLine($b64.Substring($i, [Math]::Min(1000, $b64.Length - $i))) }
+$payload = $sb.ToString()
+Remove-Item $tmp -Recurse -Force
 
-# 3) header (cmd) + installer (PowerShell) + payload; CRLF line endings, UTF-8 without BOM (a BOM breaks cmd.exe)
+# 3) header (cmd) + script (PowerShell) + payload; CRLF line endings, UTF-8 without BOM (a BOM breaks cmd.exe)
 $enc = [Text.Encoding]::UTF8
 $header = [IO.File]::ReadAllText((Join-Path $root 'installer\header.cmd'), $enc)
-$installer = [IO.File]::ReadAllText((Join-Path $root 'installer\installer.ps1'), $enc)
-$text = ($header.TrimEnd() + "`n" + $installer.TrimEnd() + "`n#PAYLOAD#`n" + $sb.ToString()) -replace "`r?`n", "`r`n"
-$out = Join-Path $dist 'AIUsageWidget-Setup.cmd'
-[IO.File]::WriteAllText($out, $text, (New-Object Text.UTF8Encoding $false))
-
-Remove-Item $tmp -Recurse -Force
-"Built $out ({0:N0} KB)" -f ((Get-Item $out).Length / 1KB)
+$targets = [ordered]@{ 'AIUsageWidget.cmd' = 'portable.ps1'; 'AIUsageWidget-Setup.cmd' = 'installer.ps1' }
+foreach ($name in $targets.Keys) {
+    $script = [IO.File]::ReadAllText((Join-Path $root ('installer\' + $targets[$name])), $enc)
+    $text = ($header.TrimEnd() + "`n" + $script.TrimEnd() + "`n#PAYLOAD#`n" + $payload) -replace "`r?`n", "`r`n"
+    $out = Join-Path $dist $name
+    [IO.File]::WriteAllText($out, $text, (New-Object Text.UTF8Encoding $false))
+    "Built $out ({0:N0} KB)" -f ((Get-Item $out).Length / 1KB)
+}
