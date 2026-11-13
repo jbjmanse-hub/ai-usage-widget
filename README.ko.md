@@ -5,7 +5,7 @@
 ChatGPT, Claude, Cursor, Perplexity, Grok 같은 **구독형 AI 서비스의 남은 사용량**을 Windows 바탕화면 구석에 작게 띄워 주는 위젯입니다.
 1분마다 자동으로 갱신되고, 한도가 언제 초기화되는지도 함께 보여 줍니다.
 
-- **파일 하나로 끝납니다.** Windows 10/11에 기본으로 있는 PowerShell과 WebView2만 사용합니다. 약 0.5MB입니다.
+- **무설치 파일 하나로 끝납니다.** Windows 10/11에 기본으로 있는 PowerShell과 WebView2만 사용합니다. 약 0.5MB입니다.
 - **API 키가 필요 없습니다.** 위젯 안에서 각 서비스에 평소처럼 로그인하면 됩니다.
 - **스마트 앱 컨트롤이 켜진 PC에서도 실행됩니다.** 함께 들어 있는 DLL은 모두 Microsoft가 서명한 공식 WebView2 파일입니다.
 - **한국어와 영어를 지원합니다.** Windows 언어를 따라가고, 메뉴에서 직접 고를 수도 있습니다.
@@ -31,18 +31,27 @@ ChatGPT, Claude, Cursor, Perplexity, Grok 같은 **구독형 AI 서비스의 남
 
 ---
 
-## 설치
+## 다운로드
 
-1. [Releases](https://github.com/jbjmanse-hub/ai-usage-widget/releases/latest)에서 **`AIUsageWidget-Setup.cmd`** 를 내려받습니다.
-2. **파일 우클릭 → 속성 → 아래쪽 "차단 해제" 체크 → 확인**
+[Releases](https://github.com/jbjmanse-hub/ai-usage-widget/releases/latest)에서 둘 중 하나를 받으세요.
+
+| 파일 | 설명 |
+|---|---|
+| **`AIUsageWidget.cmd`** (추천) | **무설치판.** 더블클릭하면 바로 위젯이 뜹니다. 설치나 바로가기가 없고, 파일을 원하는 곳에 두고 언제든 다시 실행하면 됩니다. |
+| `AIUsageWidget-Setup.cmd` | **설치판.** 바탕화면과 시작 메뉴에 **AI Usage Widget** 아이콘을 만들어 줍니다. 설치 후 파일은 지워도 됩니다. |
+
+1. **받은 파일 우클릭 → 속성 → 아래쪽 "차단 해제" 체크 → 확인**
    인터넷에서 받은 파일에는 Windows가 표시를 남깁니다. 스마트 앱 컨트롤이 켜진 PC에서는 이 단계를 하지 않으면 `.cmd` 파일이 차단됩니다. 코드 서명이 없는 파일이라 Windows가 조심하는 것입니다.
-3. 더블클릭합니다. **"Windows의 PC 보호"** 창이 뜨면 **추가 정보 → 실행**을 누르세요.
-4. 화면 오른쪽 위에 위젯이 나타나고, 바탕화면과 시작 메뉴에 **AI Usage Widget** 아이콘이 생깁니다. 다음부터는 그 아이콘으로 실행하세요. 설치 파일은 지워도 됩니다.
-5. 각 칸의 **[로그인]** 버튼을 눌러 평소처럼 로그인합니다.
+2. 더블클릭합니다. **"Windows의 PC 보호"** 창이 뜨면 **추가 정보 → 실행**을 누르세요.
+3. 화면 오른쪽 위에 위젯이 나타납니다. 각 칸의 **[로그인]** 버튼을 눌러 평소처럼 로그인합니다.
 
-**업데이트:** 새 버전의 `AIUsageWidget-Setup.cmd` 를 같은 방법으로 차단 해제한 뒤 실행하면 됩니다. 로그인과 설정은 그대로 유지됩니다.
+위젯을 숨겨 둔 상태에서 파일을 다시 실행하면 위젯이 다시 화면에 나타납니다.
 
-**삭제:** 위젯 우클릭 → **프로그램 삭제…** 를 누르면 프로그램, 바로가기, 저장된 로그인 정보가 모두 지워집니다.
+> 무설치판은 처음 실행할 때 프로그램 파일을 `%LOCALAPPDATA%\AIUsageWidget\app` 에 조용히 풀어 둡니다. Windows는 WebView2 파일을 디스크에서만 불러올 수 있기 때문입니다. 로그인 정보도 같은 폴더에 저장되어 PC에 계속 남습니다.
+
+**업데이트:** 새 버전 파일을 같은 방법으로 차단 해제한 뒤 실행하면 됩니다. 로그인과 설정은 그대로 유지됩니다.
+
+**삭제:** 위젯 우클릭 → **프로그램 삭제…** 를 누르면 프로그램 파일, 바로가기, 저장된 로그인 정보가 모두 지워집니다. 그다음 `.cmd` 파일을 지우세요.
 
 ---
 
@@ -100,7 +109,7 @@ ChatGPT, Claude, Cursor, Perplexity, Grok 같은 **구독형 AI 서비스의 남
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-`app/` 폴더를 `dist/AIUsageWidget-Setup.cmd` 하나로 묶습니다.
+`app/` 폴더를 `dist/AIUsageWidget.cmd`(무설치판)와 `dist/AIUsageWidget-Setup.cmd`(설치판)로 묶습니다.
 
 ---
 
@@ -108,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 | 증상 | 해결 |
 |---|---|
-| "스마트 앱 컨트롤이 … 차단했습니다" | 설치 파일 우클릭 → 속성 → **차단 해제** 체크 → 확인 후 다시 실행 |
+| "스마트 앱 컨트롤이 … 차단했습니다" | 받은 파일 우클릭 → 속성 → **차단 해제** 체크 → 확인 후 다시 실행 |
 | "Windows의 PC 보호" | **추가 정보 → 실행** |
 | "로그인이 필요합니다"가 계속 뜸 | 사이트가 로그아웃시킨 것이므로 다시 로그인 |
 | "불러오기 실패" 등 오류 | 사이트 방식이 바뀌었을 수 있습니다. `%LOCALAPPDATA%\AIUsageWidget\error.log` 를 확인하고 이슈를 남겨 주세요 |

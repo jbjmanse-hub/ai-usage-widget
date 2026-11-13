@@ -5,7 +5,7 @@
 A small Windows desktop widget that shows the **remaining usage of your AI subscriptions** — ChatGPT, Claude, Cursor, Perplexity and Grok.
 It refreshes every minute and shows when each limit resets.
 
-- **One file, nothing else to install.** Uses only what ships with Windows 10/11 (PowerShell and WebView2). About 0.5 MB.
+- **One portable file, no installation.** Uses only what ships with Windows 10/11 (PowerShell and WebView2). About 0.5 MB.
 - **No API keys.** Sign in to each service inside the widget, the same way you do in a browser.
 - **Works with Smart App Control.** The bundled DLLs are the official, Microsoft-signed WebView2 files.
 - **Korean and English.** Follows your Windows language, or pick one from the menu.
@@ -31,18 +31,27 @@ It refreshes every minute and shows when each limit resets.
 
 ---
 
-## Install
+## Download
 
-1. Download **`AIUsageWidget-Setup.cmd`** from [Releases](https://github.com/jbjmanse-hub/ai-usage-widget/releases/latest).
-2. **Right-click the file → Properties → check "Unblock" → OK.**
+Get one of these from [Releases](https://github.com/jbjmanse-hub/ai-usage-widget/releases/latest):
+
+| File | What it does |
+|---|---|
+| **`AIUsageWidget.cmd`** (recommended) | **Portable.** Double-click to run the widget. Nothing is installed and no shortcuts are created; keep the file wherever you like and run it again any time. |
+| `AIUsageWidget-Setup.cmd` | **Installer.** Adds an **AI Usage Widget** icon to your desktop and Start menu, then you can delete the file. |
+
+1. **Right-click the downloaded file → Properties → check "Unblock" → OK.**
    Windows marks downloaded files, and on PCs with Smart App Control a downloaded `.cmd` file is blocked until you do this. The file is not code-signed, which is why Windows is careful.
-3. Double-click it. If **"Windows protected your PC"** appears, click **More info → Run anyway**.
-4. The widget appears at the top right of the screen, and an **AI Usage Widget** icon is added to your desktop and Start menu. Use that icon from now on. You can delete the setup file.
-5. Click **[Sign in]** for each service and sign in as usual.
+2. Double-click it. If **"Windows protected your PC"** appears, click **More info → Run anyway**.
+3. The widget appears at the top right of the screen. Click **[Sign in]** for each service and sign in as usual.
 
-**Update:** run a newer `AIUsageWidget-Setup.cmd` (unblock it first in the same way). Your sign-ins and settings are kept.
+Running the file again while the widget is hidden brings it back on screen.
 
-**Uninstall:** right-click the widget → **Uninstall…**. The program, its shortcuts and all saved sign-in data are removed.
+> The portable file unpacks the program quietly to `%LOCALAPPDATA%\AIUsageWidget\app` the first time, because Windows can only load the WebView2 files from disk. Sign-ins are stored in the same folder, so they stay on the PC.
+
+**Update:** run the newer file (unblock it first in the same way). Sign-ins and settings are kept.
+
+**Remove:** right-click the widget → **Uninstall…**. The program files, any shortcuts and all saved sign-in data are removed. Then delete the `.cmd` file.
 
 ---
 
@@ -119,7 +128,7 @@ The script runs inside the signed-in site (so `fetch()` sends the cookies). `LAN
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-This packs `app/` into `dist/AIUsageWidget-Setup.cmd` (a small cmd/PowerShell installer followed by the base64-encoded app zip).
+This packs `app/` into `dist/AIUsageWidget.cmd` (portable) and `dist/AIUsageWidget-Setup.cmd` (installer): a small cmd/PowerShell launcher followed by the base64-encoded app zip.
 To run without installing, run `app/AIUsageWidget.ps1` with `powershell -STA -ExecutionPolicy Bypass -File app\AIUsageWidget.ps1`.
 
 ```
@@ -129,8 +138,8 @@ app/
   providers/          one script per AI service, unavailable.json (greyed-out services)
   docs/               guide and adding-ai-tools, in Korean (.ko) and English (.en)
   lib/                Microsoft WebView2 SDK files (signed by Microsoft)
-installer/            header.cmd + installer.ps1 used by build.ps1
-build.ps1             builds the single-file installer
+installer/            header.cmd + portable.ps1 / installer.ps1 used by build.ps1
+build.ps1             builds the two single-file releases
 ```
 
 ---
@@ -139,7 +148,7 @@ build.ps1             builds the single-file installer
 
 | Problem | Fix |
 |---|---|
-| "Smart App Control blocked…" | Right-click the setup file → Properties → check **Unblock** → OK, then run it again |
+| "Smart App Control blocked…" | Right-click the downloaded file → Properties → check **Unblock** → OK, then run it again |
 | "Windows protected your PC" | Click **More info → Run anyway** |
 | "Sign-in required" keeps showing | The site signed you out; sign in again |
 | "Failed to load" or other errors | The site may have changed. Check `%LOCALAPPDATA%\AIUsageWidget\error.log` and open an issue |

@@ -10,7 +10,8 @@ subscriptions in a small widget on your desktop. It refreshes every minute.
   then click [Done]. "Loading…" appears briefly, then the usage is shown.
 - If Google sign-in is blocked, try "Continue with email".
 - Only ChatGPT and Claude are shown at first. Right-click → [Show AI] to add others.
-- Start the widget with the "AI Usage Widget" icon on your desktop or Start menu.
+- Start the widget with AIUsageWidget.cmd (portable) or the "AI Usage Widget" icon
+  (installer). Running it again while the widget is hidden brings it back.
 
 
 ■ Using the widget
@@ -52,5 +53,5 @@ regular chat message limit.
 
 
 ■ Update / uninstall
-- Update: run a newer AIUsageWidget-Setup.cmd. Sign-ins are kept.
+- Update: run the newer AIUsageWidget.cmd (or Setup.cmd). Sign-ins are kept.
 - Uninstall: right-click → [Uninstall…]. Everything, including sign-ins, is removed.

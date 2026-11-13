@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 — 2026-11-14
+
+### Added
+- **Portable single file** `AIUsageWidget.cmd`: double-click to run, nothing installed and no shortcuts. It unpacks the app quietly to a cache folder the first time and replaces it when a newer file is run. The installer (`AIUsageWidget-Setup.cmd`) is still available.
+
+### Changed
+- Starting the widget while it is already running now brings the existing widget back on screen instead of showing an "already running" message.
+
 ## v1.1.0 — 2026-11-14
 
 ### Added
