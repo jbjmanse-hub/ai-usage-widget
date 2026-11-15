@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1 — 2026-11-15
+
+### Fixed
+- Signing in again picked the previous account automatically (for example a personal Google account), so you could not switch to a work account. Signing out of one service now also removes saved sign-ins of account providers such as Google, Microsoft, Apple, GitHub, X or a company SSO. Other AI services stay signed in.
+
+### Added
+- **Use another account** button in the sign-in window: forgets saved account-provider sign-ins and reloads the sign-in page.
+
 ## v1.2.0 — 2026-11-14
 
 ### Added

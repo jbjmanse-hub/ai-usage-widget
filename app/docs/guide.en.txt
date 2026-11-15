@@ -9,6 +9,8 @@ subscriptions in a small widget on your desktop. It refreshes every minute.
 - Click [Sign in] for a service and sign in as usual in the window that opens,
   then click [Done]. "Loading…" appears briefly, then the usage is shown.
 - If Google sign-in is blocked, try "Continue with email".
+- To sign in with a different account (e.g. work instead of personal), click
+  [Use another account] at the top of the sign-in window.
 - Only ChatGPT and Claude are shown at first. Right-click → [Show AI] to add others.
 - Start the widget with AIUsageWidget.cmd (portable) or the "AI Usage Widget" icon
   (installer). Running it again while the widget is hidden brings it back.

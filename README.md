@@ -76,7 +76,7 @@ Running the file again while the widget is hidden brings it back on screen.
 - You type your password into the service's **real sign-in page**. The widget never stores or sends your password anywhere.
 - Sign-in cookies are stored only on your PC in `%LOCALAPPDATA%\AIUsageWidget`, separate from Chrome or Edge.
 - Sign-ins survive restarts, reboots and updates. The widget visits each site every 12 hours to keep the session alive. If a site still signs you out, a tray notification appears.
-- **Sign out of all** removes everything at once; **Sign out ▸** removes a single service.
+- **Sign out of all** removes everything at once; **Sign out ▸** removes a single service, including the Google, Microsoft or other account you used to sign in to it.
 
 ---
 
@@ -151,6 +151,7 @@ build.ps1             builds the two single-file releases
 | "Smart App Control blocked…" | Right-click the downloaded file → Properties → check **Unblock** → OK, then run it again |
 | "Windows protected your PC" | Click **More info → Run anyway** |
 | "Sign-in required" keeps showing | The site signed you out; sign in again |
+| It signs in to the wrong account (e.g. personal instead of work) | In the sign-in window, click **Use another account**, or right-click → **Sign out ▸** the service, then sign in again |
 | "Failed to load" or other errors | The site may have changed. Check `%LOCALAPPDATA%\AIUsageWidget\error.log` and open an issue |
 | The widget disappeared | Click the tray icon |
 
