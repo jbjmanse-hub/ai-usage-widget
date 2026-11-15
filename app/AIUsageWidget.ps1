@@ -4,7 +4,7 @@
 # https://github.com/jbjmanse-hub/ai-usage-widget  (MIT License)
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
 
-$AppVersion = '1.2.0'
+$AppVersion = '1.2.1'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ScriptPath = $PSCommandPath
 $Lib = Join-Path $Root 'lib'
@@ -62,11 +62,12 @@ $Strings = @{
         errParse = '응답을 해석하지 못했습니다'
         expired = '{0} 로그인이 만료됐습니다. 위젯의 [로그인] 버튼으로 다시 로그인하세요.'
         loginTitle = '{0} 로그인'; loginDone = '로그인 완료'; loginHint = '아래에서 {0}에 로그인한 뒤 [로그인 완료]를 누르세요.'
+        otherAccount = '다른 계정으로 로그인'; otherAccountTip = '저장된 Google·Microsoft 등의 로그인을 지우고 처음부터 로그인합니다 (회사 계정으로 바꿀 때)'
         running = "AI 사용량 위젯이 이미 실행 중입니다.`n작업 표시줄 오른쪽 트레이 아이콘을 확인하세요."
         libFail = "WebView2 구성 파일을 불러오지 못했습니다.`nlib 폴더가 함께 있는지 확인하세요."
         browserWait = '내장 브라우저 준비 중입니다. 잠시 후 다시 눌러주세요.'
         logoutAllQ = '이 PC의 위젯에 저장된 모든 AI 도구의 로그인 정보를 지울까요?'; logoutAllT = '모든 계정 로그아웃'
-        logoutQ = "위젯에 저장된 {0} 로그인 정보를 지울까요?`n(다른 AI 도구의 로그인은 그대로 유지됩니다)"; logoutT = '{0} 로그아웃'
+        logoutQ = "위젯에 저장된 {0} 로그인 정보를 지울까요?`n(Google 등 로그인에 쓴 계정 정보도 함께 지워집니다. 다른 AI 도구의 로그인은 그대로 유지됩니다)"; logoutT = '{0} 로그아웃'
         autoFail = '자동 실행 설정에 실패했습니다.'
         uninstallQ = "AI 사용량 위젯을 이 PC에서 삭제할까요?`n`n프로그램, 바로가기, 저장된 로그인 정보가 모두 지워집니다."
         uninstallT = '프로그램 삭제'; uninstallDone = '삭제를 시작합니다. 잠시 후 모든 파일이 지워집니다.'
@@ -93,11 +94,12 @@ $Strings = @{
         errParse = 'Could not read the response'
         expired = '{0} sign-in has expired. Use the [Sign in] button on the widget to sign in again.'
         loginTitle = 'Sign in to {0}'; loginDone = 'Done'; loginHint = 'Sign in to {0} below, then click [Done].'
+        otherAccount = 'Use another account'; otherAccountTip = 'Forget saved Google, Microsoft and other sign-ins and start over (e.g. to switch to a work account)'
         running = "AI Usage Widget is already running.`nCheck the tray icon at the right of the taskbar."
         libFail = "Could not load the WebView2 files.`nMake sure the lib folder is next to the script."
         browserWait = 'The built-in browser is starting. Please try again in a moment.'
         logoutAllQ = 'Remove the sign-in data of all AI services stored by this widget?'; logoutAllT = 'Sign out of all'
-        logoutQ = "Remove the {0} sign-in data stored by this widget?`n(Other AI services stay signed in.)"; logoutT = 'Sign out of {0}'
+        logoutQ = "Remove the {0} sign-in data stored by this widget?`n(Saved Google and other account sign-ins used to log in are removed too. Other AI services stay signed in.)"; logoutT = 'Sign out of {0}'
         autoFail = 'Could not change the startup setting.'
         uninstallQ = "Uninstall AI Usage Widget from this PC?`n`nThe program, its shortcuts and all saved sign-in data will be removed."
         uninstallT = 'Uninstall'; uninstallDone = 'Uninstalling. All files will be removed in a few seconds.'
@@ -603,6 +605,17 @@ function Open-Login($site) {
     $done.Add_Click({ $script:loginWin.Close() })
     [System.Windows.Controls.DockPanel]::SetDock($done, 'Right')
     [void]$bar.Children.Add($done)
+    # Start over with no saved account (Google etc.), e.g. to use a work account instead of a personal one
+    $other = New-Object System.Windows.Controls.Button
+    $other.Content = T 'otherAccount'; $other.ToolTip = T 'otherAccountTip'
+    $other.Padding = '10,4,10,4'; $other.Margin = '0,8,0,8'
+    $other.Add_Click({
+        $core = $script:loginWv.CoreWebView2
+        if (-not $core) { return }
+        Clear-SiteAuth $core $script:loginSite { param($s) try { $script:loginWv.CoreWebView2.Navigate($s.login) } catch { Write-Log $_ } }
+    })
+    [System.Windows.Controls.DockPanel]::SetDock($other, 'Right')
+    [void]$bar.Children.Add($other)
     $msg = TB (T 'loginHint' $site.name) '#FFFFFF' 12
     $msg.VerticalAlignment = 'Center'; $msg.Margin = '12,0,0,0'; $msg.TextWrapping = 'Wrap'
     [void]$bar.Children.Add($msg)
@@ -638,32 +651,51 @@ function Open-Login($site) {
 }
 
 # ---------------- Sign-out ----------------
+# Sign-in pages often use another account provider (Google, Microsoft, Apple, a company SSO).
+# If that provider's cookies stay, signing in again picks the same account automatically.
+# So clearing a service removes its own cookies AND every cookie that does not belong to
+# another AI service; the other services stay signed in.
+$SsoOrigins = @('https://accounts.google.com', 'https://login.microsoftonline.com', 'https://login.live.com', 'https://appleid.apple.com')
+
+function Domain-Match($dom, $list) {
+    foreach ($d in $list) { if ($dom -eq $d -or $dom.EndsWith('.' + $d)) { return $true } }
+    return $false
+}
+
+function Clear-SiteAuth($core, $s, [scriptblock]$after) {
+    $keep = @()
+    foreach ($o in $script:sites.Values) { if ($o.type -eq 'usage' -and $o.id -ne $s.id) { $keep += $o.domains } }
+    When ($core.CallDevToolsProtocolMethodAsync('Network.getAllCookies', '{}')) {
+        param($t, $st)
+        $s = $st.s; $core = $st.core
+        if ($t.IsFaulted) { Write-Log $t.Exception }
+        else {
+            $n = 0
+            foreach ($c in @(($t.Result | ConvertFrom-Json).cookies)) {
+                if (-not $c) { continue }
+                $dom = "$($c.domain)".TrimStart('.')
+                $mine = Domain-Match $dom $s.domains
+                if (-not $mine -and (Domain-Match $dom $st.keep)) { continue }   # another AI service: keep
+                $arg = @{ name = $c.name; domain = $c.domain; path = $c.path } | ConvertTo-Json -Compress
+                [void]$core.CallDevToolsProtocolMethodAsync('Network.deleteCookies', $arg)
+                $n++
+            }
+            foreach ($o in @($s.origins) + $SsoOrigins) {
+                [void]$core.CallDevToolsProtocolMethodAsync('Storage.clearDataForOrigin', (@{ origin = $o; storageTypes = 'all' } | ConvertTo-Json -Compress))
+            }
+            Trace ("{0} sign-in cleared: {1} cookies removed" -f $s.name, $n)
+        }
+        $s.ready = $false; $s.needHome = $true; $s.everOk = $false; $s.notified = $true; $s.rendered = $false
+        if ($st.after) { & $st.after $s }
+    } @{ s = $s; core = $core; keep = $keep; after = $after }
+}
+
 function Logout-Site($id) {
     $s = $script:sites[$id]
     if (-not $s -or -not $s.core) { return }
     $r = [System.Windows.MessageBox]::Show((T 'logoutQ' $s.name), (T 'logoutT' $s.name), 'YesNo', 'Question')
     if ($r -ne 'Yes') { return }
-    When ($s.core.CallDevToolsProtocolMethodAsync('Network.getAllCookies', '{}')) {
-        param($t, $s)
-        if ($t.IsFaulted) { Write-Log $t.Exception; return }
-        $n = 0
-        foreach ($c in @(($t.Result | ConvertFrom-Json).cookies)) {
-            if (-not $c) { continue }
-            $dom = "$($c.domain)".TrimStart('.')
-            $match = $false
-            foreach ($d in $s.domains) { if ($dom -eq $d -or $dom.EndsWith('.' + $d)) { $match = $true } }
-            if (-not $match) { continue }
-            $arg = @{ name = $c.name; domain = $c.domain; path = $c.path } | ConvertTo-Json -Compress
-            [void]$s.core.CallDevToolsProtocolMethodAsync('Network.deleteCookies', $arg)
-            $n++
-        }
-        foreach ($o in $s.origins) {
-            [void]$s.core.CallDevToolsProtocolMethodAsync('Storage.clearDataForOrigin', (@{ origin = $o; storageTypes = 'all' } | ConvertTo-Json -Compress))
-        }
-        Trace ("{0} signed out: {1} cookies removed" -f $s.name, $n)
-        $s.ready = $false; $s.needHome = $true; $s.everOk = $false; $s.notified = $true; $s.rendered = $false
-        Start-Site $s $true
-    } $s
+    Clear-SiteAuth $s.core $s { param($s) Start-Site $s $true }
 }
 
 function Logout-All {
